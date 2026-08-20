@@ -1,0 +1,42 @@
+[
+  {
+    "username": "jjj",
+    "password": "qwertyyy",
+    "role": "Administrator",
+    "email": "admin@brokerage.com",
+    "avatar": "JJ",
+    "createdAt": "2026-05-23T22:20:31.858Z"
+  },
+  {
+    "username": "joker",
+    "password": "llllll",
+    "role": "Administrator",
+    "email": "davidadeniyi296@gmail.com",
+    "avatar": "JO",
+    "createdAt": "2026-05-27T11:48:02.082Z"
+  },
+  {
+    "username": "aaaaa",
+    "password": "123456",
+    "role": "Administrator",
+    "email": "aaa@gmail.com",
+    "avatar": "AA",
+    "createdAt": "2026-06-17T12:45:25.485Z"
+  },
+  {
+    "username": "aaaaaa",
+    "password": "123456",
+    "role": "Administrator",
+    "email": "aaaaaa@gmail.com",
+    "avatar": "AA",
+    "createdAt": "2026-06-17T12:48:53.844Z"
+  },
+  {
+    "username": "qwerty",
+    "password": "gjgj345gj",
+    "role": "Administrator",
+    "email": "qwerty@gmail.com",
+    "avatar": "QW",
+    "createdAt": "2026-06-29T21:07:50.584Z"
+  }
+]

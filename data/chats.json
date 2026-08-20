@@ -1,0 +1,34 @@
+[
+  {
+    "id": "chat_guest",
+    "name": "Guest",
+    "username": "Guest",
+    "avatar": "GU",
+    "color": "from-purple-500 to-indigo-500",
+    "status": "Online",
+    "messages": [
+      {
+        "id": "msg-1",
+        "sender": "Admin",
+        "text": "Hello Guest, how can I help you today?",
+        "time": "15:35",
+        "senderType": "admin"
+      },
+      {
+        "id": "msg-1783608858357",
+        "sender": "Guest",
+        "text": "hi",
+        "time": "15:54",
+        "senderType": "user"
+      },
+      {
+        "id": "msg-1783628088978",
+        "sender": "aaaaaa",
+        "text": "Hello",
+        "time": "21:14",
+        "senderType": "admin"
+      }
+    ],
+    "lastUpdated": "2026-07-09T20:14:49.129Z"
+  }
+]
