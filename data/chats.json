@@ -27,8 +27,15 @@
         "text": "Hello",
         "time": "21:14",
         "senderType": "admin"
+      },
+      {
+        "id": "msg-1787337842475",
+        "sender": "aaaaaa",
+        "text": "Have a stupid day",
+        "time": "19:44",
+        "senderType": "admin"
       }
     ],
-    "lastUpdated": "2026-07-09T20:14:49.129Z"
+    "lastUpdated": "2026-08-21T18:44:02.629Z"
   }
 ]
