@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { getAdminUsers, addServerLog, parseJsonBody } from "@/utils/serverDb";
+import {
+  getAdminUsers,
+  addServerLog,
+  parseJsonBody,
+} from "@/utils/serverDb";
+
+export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
   try {
@@ -8,34 +14,58 @@ export async function POST(request: Request) {
 
     if (!username || !password) {
       return NextResponse.json(
-        { error: "Username and password are required" },
+        {
+          success: false,
+          error: "Username and password are required",
+        },
         { status: 400 }
       );
     }
 
     const admins = getAdminUsers();
-    const cleanInput = (username || "").toLowerCase().trim();
+
+    const cleanInput = String(username)
+      .toLowerCase()
+      .trim();
+
     let admin = admins.find(
       (a: any) =>
-        (a.username?.toLowerCase() === cleanInput || a.email?.toLowerCase() === cleanInput) &&
+        (
+          a.username?.toLowerCase() === cleanInput ||
+          a.email?.toLowerCase() === cleanInput
+        ) &&
         a.password === password
     );
 
-    // Demo fallback for any login if not found in db
+    // Demo fallback
     if (!admin && cleanInput && password) {
       admin = {
-        username: cleanInput.includes("@") ? cleanInput.split("@")[0] : cleanInput,
+        username: cleanInput.includes("@")
+          ? cleanInput.split("@")[0]
+          : cleanInput,
         role: "Administrator",
-        email: cleanInput.includes("@") ? cleanInput : `${cleanInput}@brokerage.com`,
-        avatar: (cleanInput[0] || "U").toUpperCase() + ((cleanInput[1] || "S").toUpperCase())
+        email: cleanInput.includes("@")
+          ? cleanInput
+          : `${cleanInput}@brokerage.com`,
+        avatar:
+          (cleanInput[0] || "U").toUpperCase() +
+          (cleanInput[1] || "S").toUpperCase(),
       };
     }
 
-    const userAgent = request.headers.get("user-agent") || "Unknown Browser";
-    const ipAddress = request.headers.get("x-forwarded-for")?.split(",")[0] || "127.0.0.1";
+    const userAgent =
+      request.headers.get("user-agent") ||
+      "Unknown Browser";
+
+    const ipAddress =
+      request.headers
+        .get("x-forwarded-for")
+        ?.split(",")[0]
+        ?.trim() ||
+      request.headers.get("x-real-ip") ||
+      "127.0.0.1";
 
     if (!admin) {
-      // Log failed login audit event on the server
       addServerLog({
         userId: "usr-anonymous",
         userName: "Anonymous",
@@ -46,35 +76,45 @@ export async function POST(request: Request) {
         category: "security",
         status: "failed",
         severity: "warning",
-        ipAddress: ipAddress,
+        ipAddress,
         location: "Unknown",
         browser: userAgent,
-        details: { attemptedID: username, code: "AUTH_FAILED" }
+        details: {
+          attemptedID: username,
+          code: "AUTH_FAILED",
+        },
       });
 
       return NextResponse.json(
-        { error: "Invalid credentials. Please try again." },
+        {
+          success: false,
+          error: "Invalid credentials. Please try again.",
+        },
         { status: 401 }
       );
     }
 
-    // Set secure HTTP-only session cookie containing admin details
     const sessionData = JSON.stringify({
       username: admin.username,
       role: admin.role,
       email: admin.email,
-      avatar: admin.avatar
+      avatar: admin.avatar,
     });
 
-    cookies().set("brokerage_session", sessionData, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
-      maxAge: 60 * 60 * 2, // 2 hours
-      path: "/"
-    });
+    const cookieStore = await cookies();
 
-    // Log successful login audit event on the server
+    cookieStore.set(
+      "brokerage_session",
+      sessionData,
+      {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "strict",
+        maxAge: 60 * 60 * 2,
+        path: "/",
+      }
+    );
+
     addServerLog({
       userId: "usr-admin-session",
       userName: admin.username,
@@ -85,10 +125,13 @@ export async function POST(request: Request) {
       category: "security",
       status: "success",
       severity: "warning",
-      ipAddress: ipAddress,
+      ipAddress,
       location: "Unknown",
       browser: userAgent,
-      details: { role: admin.role, protocol: "Secured Handshake" }
+      details: {
+        role: admin.role,
+        protocol: "Secured Handshake",
+      },
     });
 
     return NextResponse.json({
@@ -97,17 +140,18 @@ export async function POST(request: Request) {
         username: admin.username,
         role: admin.role,
         email: admin.email,
-        avatar: admin.avatar
-      }
+        avatar: admin.avatar,
+      },
     });
+  } catch (error) {
+    console.error("Error in login route:", error);
 
-  } catch (err) {
-    console.error("Error in login route:", err);
     return NextResponse.json(
-      { error: "Internal server handshake error" },
+      {
+        success: false,
+        error: "Internal server handshake error",
+      },
       { status: 500 }
     );
   }
 }
-
-
