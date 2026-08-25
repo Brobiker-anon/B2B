@@ -21,15 +21,7 @@ const TradingViewChart = dynamic(
   () => import('@/components/TradingViewChart'),
   { 
     ssr: false,
-    loading: () => <div className="h-[480px] w-full bg-white/5 animate-pulse rounded-lg flex items-center justify-center text-muted-foreground text-sm">Loading advanced chart terminal...</div>
-  }
-);
-
-const CandlestickChart = dynamic(
-  () => import('@/components/CandlestickChart'),
-  {
-    ssr: false,
-    loading: () => <div className="h-[480px] w-full bg-white/5 animate-pulse rounded-lg flex items-center justify-center text-muted-foreground text-sm">Loading AI candlestick terminal...</div>
+    loading: () => <div className="h-[520px] w-full bg-white/5 animate-pulse rounded-lg flex items-center justify-center text-muted-foreground text-sm">Loading TradingView terminal...</div>
   }
 );
 
@@ -48,19 +40,6 @@ const getTradingViewSymbol = (asset: string) => {
   }
 };
 
-
-interface CandleData {
-  time: string;
-  timestamp: number;
-  open: number;
-  close: number;
-  high: number;
-  low: number;
-  wick: [number, number];
-  body: [number, number];
-  isBullish: boolean;
-}
-
 interface CustomTrade {
   id: string;
   type: string;
@@ -72,40 +51,6 @@ interface CustomTrade {
   timestamp: string;
   status: "Open" | "Closed";
 }
-
-function formatTime(timestamp: number): string {
-  const date = new Date(timestamp);
-  const hours = date.getHours().toString().padStart(2, '0');
-  const mins = date.getMinutes().toString().padStart(2, '0');
-  return `${hours}:${mins}`;
-}
-
-function generateInitialData(basePrice: number = 62707.240): CandleData[] {
-  const data: CandleData[] = [];
-  const now = Date.now();
-  for (let i = 60; i >= 0; i--) {
-    const timestamp = now - i * 60000;
-    const alignedTimestamp = Math.floor(timestamp / 60000) * 60000;
-    const open = basePrice + (Math.random() - 0.5) * 500;
-    const close = open + (Math.random() - 0.5) * 300;
-    const high = Math.max(open, close) + Math.random() * 100;
-    const low = Math.min(open, close) - Math.random() * 100;
-    data.push({
-      time: formatTime(alignedTimestamp),
-      timestamp: alignedTimestamp,
-      open: Math.round(open),
-      close: Math.round(close),
-      high: Math.round(high),
-      low: Math.round(low),
-      wick: [Math.round(low), Math.round(high)],
-      body: [Math.round(open), Math.round(close)],
-      isBullish: close >= open
-    });
-  }
-  return data;
-}
-
-// Candlestick Pattern States and Highcharts setup for Trade Dashboard
 
 export default function Trade({ initialAsset = "BTC" }: { initialAsset?: string }) {
   const [tradeTab, setTradeTab] = useState<"Buy" | "Sell" | "Convert">("Buy");
@@ -122,13 +67,11 @@ export default function Trade({ initialAsset = "BTC" }: { initialAsset?: string 
   const [leverage, setLeverage] = useState(5);
   const [useTpSl, setUseTpSl] = useState(false);
   const [duration, setDuration] = useState("2 minutes");
-  const [chartEngine, setChartEngine] = useState<"candlestick" | "tradingview">("candlestick");
   const [tradesTab, setTradesTab] = useState<"All" | "Swaps" | "Auto">("All");
   const [openTradesExpanded, setOpenTradesExpanded] = useState(true);
   const [closedTradesExpanded, setClosedTradesExpanded] = useState(false);
   
   const [currentPrice, setCurrentPrice] = useState(62707.240);
-  const [chartData, setChartData] = useState<CandleData[]>([]);
 
   const { 
     accountType,
@@ -194,32 +137,6 @@ export default function Trade({ initialAsset = "BTC" }: { initialAsset?: string 
     return null; // simulation
   };
 
-  const updateChartData = (timestamp: number, open: number, high: number, low: number, close: number) => {
-    setChartData((prev) => {
-      if (prev.length === 0) return prev;
-      const lastCandle = prev[prev.length - 1];
-      
-      const newCandle: CandleData = {
-        time: formatTime(timestamp),
-        timestamp,
-        open: Math.round(open),
-        close: Math.round(close),
-        high: Math.round(high),
-        low: Math.round(low),
-        wick: [Math.round(low), Math.round(high)],
-        body: [Math.round(open), Math.round(close)],
-        isBullish: close >= open
-      };
-
-      if (lastCandle.timestamp === timestamp) {
-        return [...prev.slice(0, prev.length - 1), newCandle];
-      } else if (timestamp > lastCandle.timestamp) {
-        return [...prev.slice(-99), newCandle];
-      }
-      return prev;
-    });
-  };
-
   const connectWebSocket = (symbol: string) => {
     if (wsRef.current) {
       wsRef.current.close();
@@ -240,15 +157,8 @@ export default function Trade({ initialAsset = "BTC" }: { initialAsset?: string 
         const data = JSON.parse(event.data);
         const kline = data.k;
         lastWsMessageTimeRef.current = Date.now();
-        
-        const open = parseFloat(kline.o);
-        const high = parseFloat(kline.h);
-        const low = parseFloat(kline.l);
         const close = parseFloat(kline.c);
-        const timestamp = parseInt(kline.t);
-        
         setCurrentPrice(close);
-        updateChartData(timestamp, open, high, low, close);
       };
       
       ws.onerror = (err) => {
@@ -267,7 +177,6 @@ export default function Trade({ initialAsset = "BTC" }: { initialAsset?: string 
     else if (selectedAsset === "AAPL") basePrice = 180.45;
     
     setCurrentPrice(basePrice);
-    setChartData(generateInitialData(basePrice));
     connectWebSocket(selectedAsset);
     
     return () => {
@@ -278,7 +187,7 @@ export default function Trade({ initialAsset = "BTC" }: { initialAsset?: string 
     };
   }, [selectedAsset]);
 
-  // Tick fallback simulation
+  // Tick fallback simulation for price badge
   useEffect(() => {
     const checkFallback = setInterval(() => {
       const timeSinceLastMessage = Date.now() - lastWsMessageTimeRef.current;
@@ -288,38 +197,7 @@ export default function Trade({ initialAsset = "BTC" }: { initialAsset?: string 
         fallbackIntervalRef.current = setInterval(() => {
           setCurrentPrice(prev => {
             const change = (Math.random() - 0.5) * (selectedAsset === "BTC" || selectedAsset === "ETH" ? 25 : 0.8);
-            const nextPrice = +(prev + change).toFixed(selectedAsset === "AAPL" ? 2 : 3);
-            
-            setChartData((prevChart) => {
-              if (prevChart.length === 0) return prevChart;
-              const lastCandle = { ...prevChart[prevChart.length - 1] };
-              const now = Date.now();
-              const currentMinute = Math.floor(now / 60000) * 60000;
-              
-              if (lastCandle.timestamp === currentMinute) {
-                lastCandle.close = Math.round(nextPrice);
-                lastCandle.high = Math.max(lastCandle.high, Math.round(nextPrice));
-                lastCandle.low = Math.min(lastCandle.low, Math.round(nextPrice));
-                lastCandle.body = [lastCandle.open, Math.round(nextPrice)];
-                lastCandle.isBullish = nextPrice >= lastCandle.open;
-                return [...prevChart.slice(0, prevChart.length - 1), lastCandle];
-              } else {
-                const newCandle: CandleData = {
-                  time: formatTime(currentMinute),
-                  timestamp: currentMinute,
-                  open: lastCandle.close,
-                  close: Math.round(nextPrice),
-                  high: Math.max(lastCandle.close, Math.round(nextPrice)),
-                  low: Math.min(lastCandle.close, Math.round(nextPrice)),
-                  wick: [Math.min(lastCandle.close, Math.round(nextPrice)), Math.max(lastCandle.close, Math.round(nextPrice))],
-                  body: [lastCandle.close, Math.round(nextPrice)],
-                  isBullish: nextPrice >= lastCandle.close
-                };
-                return [...prevChart.slice(-99), newCandle];
-              }
-            });
-            
-            return nextPrice;
+            return +(prev + change).toFixed(selectedAsset === "AAPL" ? 2 : 3);
           });
         }, 3000);
       } else if (timeSinceLastMessage <= 4000 && !isSimulating && fallbackIntervalRef.current) {
@@ -452,41 +330,10 @@ export default function Trade({ initialAsset = "BTC" }: { initialAsset?: string 
         {/* LEFT COLUMN: Chart & My trades */}
         <div className="lg:col-span-2 space-y-6">
           
-          {/* Chart Header Bar with Engine Selector */}
-          <div className="flex flex-wrap justify-between items-center gap-2 bg-black/40 p-2.5 rounded-xl border border-white/5">
-            <div className="flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-[#089981]" />
-              <span className="text-xs font-bold text-white uppercase tracking-wider">Trading Terminal</span>
-            </div>
-            <div className="flex gap-1 bg-white/5 p-1 rounded-lg border border-white/10 text-xs">
-              <button
-                onClick={() => setChartEngine("candlestick")}
-                className={`px-3 py-1 rounded font-semibold transition-all cursor-pointer ${
-                  chartEngine === "candlestick"
-                    ? "bg-[#089981] text-white shadow-sm"
-                    : "text-slate-400 hover:text-white"
-                }`}
-              >
-                AI Candlestick Terminal
-              </button>
-              <button
-                onClick={() => setChartEngine("tradingview")}
-                className={`px-3 py-1 rounded font-semibold transition-all cursor-pointer ${
-                  chartEngine === "tradingview"
-                    ? "bg-[#3b82f6] text-white shadow-sm"
-                    : "text-slate-400 hover:text-white"
-                }`}
-              >
-                TradingView Terminal
-              </button>
-            </div>
+          {/* TradingView Terminal */}
+          <div className="overflow-hidden rounded-xl border border-white/10 bg-black/40 shadow-xl">
+            <TradingViewChart symbol={getTradingViewSymbol(selectedAsset)} theme="dark" height={520} />
           </div>
-
-          {chartEngine === "candlestick" ? (
-            <CandlestickChart chartData={chartData} selectedAsset={selectedAsset} height={380} />
-          ) : (
-            <TradingViewChart symbol={getTradingViewSymbol(selectedAsset)} theme="dark" height={380} />
-          )}
 
           {/* My trades Collapsible Accordions Panel */}
           <GlassCard className="p-6 space-y-4 bg-black/20 border-white/5">
