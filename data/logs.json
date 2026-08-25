@@ -5,6 +5,25 @@
     "userEmail": "john.doe@brokerage.com",
     "userRole": "Retail Investor",
     "avatar": "JD",
+    "action": "User viewed Portfolio Dashboard",
+    "category": "system",
+    "status": "success",
+    "severity": "info",
+    "ipAddress": "192.168.1.104",
+    "location": "New York, USA",
+    "browser": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "details": {
+      "path": "/"
+    },
+    "id": "log-1787691562033-929",
+    "timestamp": "2026-08-25T20:59:22.033Z"
+  },
+  {
+    "userId": "usr-john-doe",
+    "userName": "John Doe",
+    "userEmail": "john.doe@brokerage.com",
+    "userRole": "Retail Investor",
+    "avatar": "JD",
     "action": "Administrator accessed Central Activity Audit logs",
     "category": "security",
     "status": "success",
@@ -3798,24 +3817,5 @@
     },
     "id": "log-1783408602947-210",
     "timestamp": "2026-07-07T07:16:42.947Z"
-  },
-  {
-    "userId": "usr-john-doe",
-    "userName": "John Doe",
-    "userEmail": "john.doe@brokerage.com",
-    "userRole": "Retail Investor",
-    "avatar": "JD",
-    "action": "User accessed Trade Execution terminal",
-    "category": "trade",
-    "status": "success",
-    "severity": "info",
-    "ipAddress": "192.168.1.104",
-    "location": "New York, USA",
-    "browser": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
-    "details": {
-      "path": "/trade"
-    },
-    "id": "log-1783405560321-992",
-    "timestamp": "2026-07-07T06:26:00.321Z"
   }
 ]

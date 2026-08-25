@@ -1,36 +1,22 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { getAdminUsers, addServerLog, parseJsonBody } from "@/utils/serverDb";
-import fs from "fs";
-import path from "path";
-
-const USERS_FILE_PATH = path.join(process.cwd(), "data", "users.json");
-
-const getRegularUsers = () => {
-  try {
-    if (!fs.existsSync(USERS_FILE_PATH)) {
-      return [];
-    }
-    const data = fs.readFileSync(USERS_FILE_PATH, "utf-8");
-    return JSON.parse(data);
-  } catch (err) {
-    console.error("Error reading users:", err);
-    return [];
-  }
-};
-
-const saveRegularUsers = (users: any[]) => {
-  try {
-    fs.writeFileSync(USERS_FILE_PATH, JSON.stringify(users, null, 2), "utf-8");
-  } catch (err) {
-    console.error("Error saving users:", err);
-  }
-};
+import { getAdminUsers, addServerLog, parseJsonBody, saveAdminUsers } from "@/utils/serverDb";
 
 export async function POST(request: Request) {
   try {
     const body = await parseJsonBody(request);
-    const { username, password, email } = body;
+    const {
+      username,
+      password,
+      email,
+      role,
+      country,
+      phone,
+      currency,
+      referralCode,
+      firstName,
+      lastName,
+    } = body;
 
     if (!username || !password || !email) {
       return NextResponse.json(
@@ -62,13 +48,10 @@ export async function POST(request: Request) {
     }
 
     const admins = getAdminUsers();
-    const users = getRegularUsers();
 
-    // Check for duplicate username in both admin and user databases
+    // Check for duplicate username
     const existingUsername = admins.find(
       (a: any) => a.username.toLowerCase() === username.trim().toLowerCase()
-    ) || users.find(
-      (u: any) => u.username.toLowerCase() === username.trim().toLowerCase()
     );
     if (existingUsername) {
       return NextResponse.json(
@@ -77,11 +60,9 @@ export async function POST(request: Request) {
       );
     }
 
-    // Check for duplicate email in both databases
+    // Check for duplicate email
     const existingEmail = admins.find(
       (a: any) => a.email.toLowerCase() === email.trim().toLowerCase()
-    ) || users.find(
-      (u: any) => u.email.toLowerCase() === email.trim().toLowerCase()
     );
     if (existingEmail) {
       return NextResponse.json(
@@ -97,17 +78,26 @@ export async function POST(request: Request) {
         ? (nameParts[0][0] + nameParts[1][0]).toUpperCase()
         : username.trim().substring(0, 2).toUpperCase();
 
+    const assignedRole =
+      role === "Administrator" ? "Administrator" : "User";
+
     const newUser = {
       username: username.trim().toLowerCase(),
       password: password,
-      role: "User",
+      role: assignedRole,
       email: email.trim().toLowerCase(),
       avatar,
+      firstName: firstName?.trim() || nameParts[0] || "",
+      lastName: lastName?.trim() || nameParts.slice(1).join(" ") || "",
+      country: country || "",
+      phone: phone || "",
+      currency: currency || "",
+      referralCode: referralCode || "",
       createdAt: new Date().toISOString()
     };
 
-    users.push(newUser);
-    saveRegularUsers(users);
+    admins.push(newUser);
+    saveAdminUsers(admins);
 
     // Auto-login the newly registered user
     const sessionData = JSON.stringify({
@@ -117,10 +107,11 @@ export async function POST(request: Request) {
       avatar: newUser.avatar
     });
 
-    cookies().set("brokerage_session", sessionData, {
+    const cookieStore = await cookies();
+    cookieStore.set("brokerage_session", sessionData, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
+      sameSite: "lax",
       maxAge: 60 * 60 * 2, // 2 hours
       path: "/"
     });
@@ -142,7 +133,14 @@ export async function POST(request: Request) {
       ipAddress,
       location: "Unknown",
       browser: userAgent,
-      details: { role: newUser.role, email: newUser.email }
+      details: {
+        role: newUser.role,
+        email: newUser.email,
+        country: newUser.country,
+        phone: newUser.phone,
+        currency: newUser.currency,
+        referralCode: newUser.referralCode,
+      }
     });
 
     return NextResponse.json({

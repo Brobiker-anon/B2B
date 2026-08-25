@@ -102,7 +102,7 @@ interface CustomTrade {
 }
 
 export default function Dashboard() {
-  const { user, isLoading, addToast, usdtBalance, setUsdtBalance, btcBalance, setBtcBalance, stakedBalance } = useApp();
+  const { user, isLoading, addToast, accountType, realBalance, demoBalance, setRealBalance, setDemoBalance, btcBalance, setBtcBalance, stakedBalance } = useApp();
   const [mounted, setMounted] = useState(false);
   const [chartData, setChartData] = useState<any[]>([]);
   const [btcPrice, setBtcPrice] = useState(63021.123);
@@ -120,8 +120,25 @@ export default function Dashboard() {
   // Accordion state
   const [openTradesExpanded, setOpenTradesExpanded] = useState(true);
   const [closedTradesExpanded, setClosedTradesExpanded] = useState(false);
-  const [tradesList, setTradesList] = useState<CustomTrade[]>([]);
+  const [tradesList, setTradesList] = useState<CustomTrade[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem("brokerage_active_trades");
+        if (saved) return JSON.parse(saved);
+      } catch {}
+    }
+    return [];
+  });
   const [tradesTab, setTradesTab] = useState<"All" | "Swaps" | "Auto">("All");
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem("brokerage_active_trades", JSON.stringify(tradesList));
+      } catch {}
+    }
+  }, [tradesList]);
+
   useEffect(() => {
     setMounted(true);
     setChartData(generatePortfolioData());
@@ -147,7 +164,8 @@ export default function Dashboard() {
     );
   }
 
-  const totalPortfolioValue = usdtBalance + btcBalance * btcPrice + stakedBalance;
+  const activeBalance = accountType === "REAL" ? realBalance : demoBalance;
+  const setActiveBalance = accountType === "REAL" ? setRealBalance : setDemoBalance;
 
   const handlePlaceOrder = () => {
     const amt = parseFloat(tradeAmount);
@@ -157,25 +175,25 @@ export default function Dashboard() {
     }
 
     if (tradeTab === "Buy") {
-      if (amt > usdtBalance) {
+      if (amt > activeBalance) {
         addToast("Insufficient USD balance", "error");
         return;
       }
-      setUsdtBalance((prev) => prev - amt);
+      setActiveBalance((prev) => Math.max(0, prev - amt));
       if (selectedAsset === "BTC") {
         setBtcBalance((prev) => prev + amt / btcPrice);
       }
-      addToast(`Successfully opened Buy limit order for ${amt} USD of ${selectedAsset} at 5x leverage`, "success");
+      addToast(`Successfully opened Buy limit order for $${amt.toLocaleString()} USD of ${selectedAsset} at 5x leverage (${accountType})`, "success");
     } else {
       if (selectedAsset === "BTC" && amt / btcPrice > btcBalance) {
         addToast("Insufficient BTC balance", "error");
         return;
       }
       if (selectedAsset === "BTC") {
-        setBtcBalance((prev) => prev - amt / btcPrice);
+        setBtcBalance((prev) => Math.max(0, prev - amt / btcPrice));
       }
-      setUsdtBalance((prev) => prev + amt);
-      addToast(`Successfully placed Sell order for ${amt} USD of ${selectedAsset}`, "success");
+      setActiveBalance((prev) => prev + amt);
+      addToast(`Successfully placed Sell order for $${amt.toLocaleString()} USD of ${selectedAsset} (${accountType})`, "success");
     }
 
     // Add to trades list
@@ -207,13 +225,15 @@ export default function Dashboard() {
         {/* LEFT COLUMN: Middle Content (Total Balance, Top Assets, Chart, My Trades) */}
         <div className="lg:col-span-2 space-y-6">
           
-          {/* Total Balance HUD */}
+          {/* Total Balance HUD matching Topbar balance */}
           <GlassCard className="p-6">
             <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
               <div>
-                <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Total Balance</span>
+                <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">
+                  Total Balance ({accountType})
+                </span>
                 <div className="text-3xl font-extrabold text-white mt-1">
-                  A${totalPortfolioValue.toLocaleString(undefined, { minimumFractionDigits: 3, maximumFractionDigits: 3 })}
+                  ${activeBalance.toFixed(2)}
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -270,7 +290,7 @@ export default function Dashboard() {
                       </div>
                       <div className="text-right mt-2">
                         <div className="text-xs font-semibold text-white">
-                          A${asset.value.toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 4 })}
+                          ${asset.value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </div>
                         <div className="text-[10px] text-muted-foreground">
                           {asset.bal.toFixed(4)} {asset.symbol}
@@ -531,7 +551,7 @@ export default function Dashboard() {
             <div className="space-y-1 pt-1">
               <div className="flex justify-between text-[10px] font-mono">
                 <span className="text-muted-foreground">Current USD balance:</span>
-                <span className="text-white font-semibold">{usdtBalance.toLocaleString(undefined, { maximumFractionDigits: 2 })} USD</span>
+                <span className="text-white font-semibold">{activeBalance.toLocaleString(undefined, { maximumFractionDigits: 2 })} USD</span>
               </div>
               <div className="flex justify-between text-[10px] font-mono">
                 <span className="text-muted-foreground">Current BTC price:</span>
@@ -625,7 +645,7 @@ export default function Dashboard() {
             <Award className="w-5 h-5" />
           </div>
           <div>
-            <h4 className="font-bold text-white text-xs">Shane Coleman</h4>
+            <h4 className="font-bold text-white text-xs">{user?.username || "Verified Account"}</h4>
             <p className="text-[10px] text-green-400 font-semibold cursor-pointer hover:underline" onClick={() => window.location.href = "/settings"}>
               Verify your account
             </p>

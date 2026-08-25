@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import {
   getChats,
   saveChats,
+  addServerLog,
   ChatMessage,
   SupportChat,
 } from "@/utils/serverDb";
@@ -10,22 +11,26 @@ import {
 export const dynamic = "force-dynamic";
 
 async function getSession() {
-  const cookieStore = await cookies();
-  const sessionCookie = cookieStore.get("brokerage_session");
-
-  if (!sessionCookie?.value) {
-    return {
-      isAdmin: false,
-      username: "",
-    };
-  }
-
   try {
+    const cookieStore = await cookies();
+    const sessionCookie = cookieStore.get("brokerage_session");
+
+    if (!sessionCookie?.value) {
+      return {
+        isAdmin: false,
+        username: "",
+        role: "",
+        email: "",
+      };
+    }
+
     const session = JSON.parse(sessionCookie.value);
 
     return {
       isAdmin: session.role === "Administrator",
       username: session.username || "",
+      role: session.role || "User",
+      email: session.email || "",
     };
   } catch (error) {
     console.error("Failed to parse brokerage session:", error);
@@ -33,6 +38,8 @@ async function getSession() {
     return {
       isAdmin: false,
       username: "",
+      role: "",
+      email: "",
     };
   }
 }
@@ -49,18 +56,20 @@ function createUserChat(username: string): SupportChat {
   const randomColor =
     colors[Math.floor(Math.random() * colors.length)];
 
+  const cleanName = username.trim() || "Guest";
+
   return {
-    id: `chat_${username.toLowerCase()}`,
-    name: username,
-    username,
-    avatar: username.substring(0, 2).toUpperCase(),
+    id: `chat_${cleanName.toLowerCase().replace(/\s+/g, "_")}`,
+    name: cleanName,
+    username: cleanName,
+    avatar: cleanName.substring(0, 2).toUpperCase(),
     color: randomColor,
     status: "Online",
     messages: [
       {
         id: `msg-${Date.now()}`,
         sender: "Admin",
-        text: `Hello ${username}, how can I help you today?`,
+        text: `Hello ${cleanName}, how can I help you today?`,
         time: new Date().toLocaleTimeString([], {
           hour: "2-digit",
           minute: "2-digit",
@@ -76,45 +85,46 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const activeUsername = searchParams.get("username");
+    const fetchAll = searchParams.get("all") === "true";
 
     const {
       isAdmin,
       username: loggedInUsername,
     } = await getSession();
 
-    const targetUsername =
-      activeUsername || loggedInUsername || "Guest";
-
     const chats = getChats();
+
+    // If requested with all=true or by Admin panel requesting list
+    if (fetchAll || (isAdmin && !activeUsername && !searchParams.get("self"))) {
+      return NextResponse.json({
+        success: true,
+        isAdmin: true,
+        chats,
+      });
+    }
+
+    const targetUsername = activeUsername || loggedInUsername || "Guest";
 
     let userChat = chats.find(
       (chat) =>
-        chat.username.toLowerCase() ===
-        targetUsername.toLowerCase()
+        chat.username.toLowerCase() === targetUsername.toLowerCase() ||
+        chat.id === `chat_${targetUsername.toLowerCase().replace(/\s+/g, "_")}`
     );
 
     if (!userChat) {
       userChat = createUserChat(targetUsername);
       chats.push(userChat);
+      saveChats(chats);
     } else {
       userChat.status = "Online";
-    }
-
-    saveChats(chats);
-
-    if (isAdmin) {
-      return NextResponse.json({
-        success: true,
-        isAdmin: true,
-        chats,
-        chat: userChat,
-      });
+      saveChats(chats);
     }
 
     return NextResponse.json({
       success: true,
-      isAdmin: false,
+      isAdmin,
       chat: userChat,
+      chats: isAdmin ? chats : undefined,
     });
   } catch (error) {
     console.error("GET /api/chat error:", error);
@@ -138,6 +148,7 @@ export async function POST(request: Request) {
       text,
       sender,
       senderType,
+      username: bodyUsername,
     } = body;
 
     if (
@@ -157,9 +168,13 @@ export async function POST(request: Request) {
     const {
       isAdmin,
       username: loggedInUsername,
+      email: loggedInEmail,
+      role: loggedInRole,
     } = await getSession();
 
     const chats = getChats();
+    const userAgent = request.headers.get("user-agent") || "Unknown Browser";
+    const ipAddress = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "127.0.0.1";
 
     /*
      * ADMIN MESSAGE
@@ -187,7 +202,7 @@ export async function POST(request: Request) {
       }
 
       const targetChat = chats.find(
-        (chat) => chat.id === chatId
+        (chat) => chat.id === chatId || chat.username.toLowerCase() === chatId.toLowerCase()
       );
 
       if (!targetChat) {
@@ -201,9 +216,8 @@ export async function POST(request: Request) {
       }
 
       const newMessage: ChatMessage = {
-        id: `msg-${Date.now()}`,
-        sender:
-          loggedInUsername || "System Admin",
+        id: `msg-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        sender: "Admin",
         text: text.trim(),
         time: new Date().toLocaleTimeString([], {
           hour: "2-digit",
@@ -213,13 +227,32 @@ export async function POST(request: Request) {
       };
 
       targetChat.messages.push(newMessage);
-
-      targetChat.lastUpdated =
-        new Date().toISOString();
-
+      targetChat.lastUpdated = new Date().toISOString();
       targetChat.status = "Online";
 
       saveChats(chats);
+
+      // Log admin support reply to server activity logs
+      addServerLog({
+        userId: `usr-${loggedInUsername || "admin"}`,
+        userName: loggedInUsername || "Administrator",
+        userEmail: loggedInEmail || "admin@brokerage.internal",
+        userRole: "Administrator",
+        avatar: "AD",
+        action: `Admin support reply sent to ${targetChat.name}: "${text.trim().slice(0, 50)}${text.trim().length > 50 ? '...' : ''}"`,
+        category: "chat",
+        status: "success",
+        severity: "info",
+        ipAddress,
+        location: "System Admin Terminal",
+        browser: userAgent,
+        details: {
+          recipientChatId: targetChat.id,
+          recipientUser: targetChat.username,
+          messageId: newMessage.id,
+          text: newMessage.text,
+        },
+      });
 
       return NextResponse.json({
         success: true,
@@ -231,22 +264,16 @@ export async function POST(request: Request) {
     /*
      * USER MESSAGE
      */
-
-    const targetUsername =
-      loggedInUsername ||
-      sender ||
-      "Guest";
+    const targetUsername = loggedInUsername || bodyUsername || sender || "Guest";
 
     let userChat = chats.find(
       (chat) =>
-        chat.username.toLowerCase() ===
-        targetUsername.toLowerCase()
+        chat.username.toLowerCase() === targetUsername.toLowerCase() ||
+        chat.id === (chatId || `chat_${targetUsername.toLowerCase().replace(/\s+/g, "_")}`)
     );
 
     /*
-     * IMPORTANT:
-     * If the user doesn't have a chat yet,
-     * create it instead of returning 404.
+     * If the user doesn't have a chat yet, create it.
      */
     if (!userChat) {
       userChat = createUserChat(targetUsername);
@@ -254,7 +281,7 @@ export async function POST(request: Request) {
     }
 
     const newMessage: ChatMessage = {
-      id: `msg-${Date.now()}`,
+      id: `msg-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
       sender: targetUsername,
       text: text.trim(),
       time: new Date().toLocaleTimeString([], {
@@ -265,13 +292,32 @@ export async function POST(request: Request) {
     };
 
     userChat.messages.push(newMessage);
-
-    userChat.lastUpdated =
-      new Date().toISOString();
-
+    userChat.lastUpdated = new Date().toISOString();
     userChat.status = "Online";
 
     saveChats(chats);
+
+    // Log user chat message to server activity logs
+    addServerLog({
+      userId: `usr-${targetUsername}`,
+      userName: targetUsername,
+      userEmail: loggedInEmail || `${targetUsername}@user.net`,
+      userRole: loggedInRole || "User",
+      avatar: userChat.avatar,
+      action: `Live chat message from ${targetUsername}: "${text.trim().slice(0, 50)}${text.trim().length > 50 ? '...' : ''}"`,
+      category: "chat",
+      status: "success",
+      severity: "info",
+      ipAddress,
+      location: "Live Support Lounge",
+      browser: userAgent,
+      details: {
+        chatId: userChat.id,
+        user: targetUsername,
+        messageId: newMessage.id,
+        text: newMessage.text,
+      },
+    });
 
     return NextResponse.json({
       success: true,

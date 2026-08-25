@@ -1,6 +1,40 @@
 import fs from "fs";
+import os from "os";
 import path from "path";
 import { EventEmitter } from "events";
+
+let cachedDataDir: string | null = null;
+
+/** Resolve a writable data directory (works on serverless production where cwd/data is read-only). */
+const getDataDir = (): string => {
+  if (cachedDataDir) return cachedDataDir;
+
+  const candidates = [
+    path.join(process.cwd(), "data"),
+    path.join(os.tmpdir(), "b2b-data"),
+  ];
+
+  for (const dir of candidates) {
+    try {
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      const probe = path.join(dir, ".write-probe");
+      fs.writeFileSync(probe, "ok", "utf-8");
+      fs.unlinkSync(probe);
+      cachedDataDir = dir;
+      return dir;
+    } catch {
+      // try next candidate
+    }
+  }
+
+  cachedDataDir = path.join(os.tmpdir(), "b2b-data");
+  if (!fs.existsSync(cachedDataDir)) {
+    fs.mkdirSync(cachedDataDir, { recursive: true });
+  }
+  return cachedDataDir;
+};
 
 // Global Event Emitter for real-time SSE stream push
 export const logEmitter = new EventEmitter();
@@ -26,27 +60,33 @@ export interface ActivityLog {
   details?: Record<string, any>;
 }
 
-const LOGS_FILE_PATH = path.join(process.cwd(), "data", "logs.json");
-const USERS_FILE_PATH = path.join(process.cwd(), "data", "users.json");
+const filePath = (name: string) => path.join(getDataDir(), name);
 
-// Ensure data folder exists
 const ensureDataFolder = () => {
-  const dataDir = path.join(process.cwd(), "data");
-  if (!fs.existsSync(dataDir)) {
-    fs.mkdirSync(dataDir, { recursive: true });
-  }
+  getDataDir();
 };
 
 // Get all logs from server JSON file
 export const getServerLogs = (): ActivityLog[] => {
   ensureDataFolder();
   try {
-    if (!fs.existsSync(LOGS_FILE_PATH)) {
+    const logsPath = filePath("logs.json");
+    if (!fs.existsSync(logsPath)) {
+      const bundledPath = path.join(process.cwd(), "data", "logs.json");
+      if (fs.existsSync(bundledPath)) {
+        try {
+          const bundled = fs.readFileSync(bundledPath, "utf-8");
+          fs.writeFileSync(logsPath, bundled, "utf-8");
+          return JSON.parse(bundled);
+        } catch {
+          // fall through
+        }
+      }
       const initialLogs: ActivityLog[] = [];
-      fs.writeFileSync(LOGS_FILE_PATH, JSON.stringify(initialLogs, null, 2), "utf-8");
+      fs.writeFileSync(logsPath, JSON.stringify(initialLogs, null, 2), "utf-8");
       return initialLogs;
     }
-    const data = fs.readFileSync(LOGS_FILE_PATH, "utf-8");
+    const data = fs.readFileSync(logsPath, "utf-8");
     return JSON.parse(data);
   } catch (err) {
     console.error("Error reading server logs:", err);
@@ -73,7 +113,7 @@ export const addServerLog = (logData: Omit<ActivityLog, "id" | "timestamp">): Ac
   }
 
   try {
-    fs.writeFileSync(LOGS_FILE_PATH, JSON.stringify(logs, null, 2), "utf-8");
+    fs.writeFileSync(filePath("logs.json"), JSON.stringify(logs, null, 2), "utf-8");
     // Emit new-log event to any open EventSource handlers
     logEmitter.emit("new-log", newLog);
   } catch (err) {
@@ -88,7 +128,7 @@ export const clearServerLogs = () => {
   ensureDataFolder();
   try {
     const cleared: ActivityLog[] = [];
-    fs.writeFileSync(LOGS_FILE_PATH, JSON.stringify(cleared, null, 2), "utf-8");
+    fs.writeFileSync(filePath("logs.json"), JSON.stringify(cleared, null, 2), "utf-8");
     logEmitter.emit("clear-logs");
   } catch (err) {
     console.error("Error clearing server logs:", err);
@@ -108,12 +148,24 @@ export async function parseJsonBody(request: Request) {
 export const getAdminUsers = () => {
   ensureDataFolder();
   try {
-    if (!fs.existsSync(USERS_FILE_PATH)) {
+    const usersPath = filePath("users.json");
+    if (!fs.existsSync(usersPath)) {
+      // Seed from bundled data on first run (e.g. fresh serverless instance)
+      const bundledPath = path.join(process.cwd(), "data", "users.json");
+      if (fs.existsSync(bundledPath)) {
+        try {
+          const bundled = fs.readFileSync(bundledPath, "utf-8");
+          fs.writeFileSync(usersPath, bundled, "utf-8");
+          return JSON.parse(bundled);
+        } catch {
+          // fall through to empty list
+        }
+      }
       const defaultAdmins: any[] = [];
-      fs.writeFileSync(USERS_FILE_PATH, JSON.stringify(defaultAdmins, null, 2), "utf-8");
+      fs.writeFileSync(usersPath, JSON.stringify(defaultAdmins, null, 2), "utf-8");
       return defaultAdmins;
     }
-    const data = fs.readFileSync(USERS_FILE_PATH, "utf-8");
+    const data = fs.readFileSync(usersPath, "utf-8");
     return JSON.parse(data);
   } catch (err) {
     console.error("Error reading admin users:", err);
@@ -125,13 +177,12 @@ export const getAdminUsers = () => {
 export const saveAdminUsers = (users: any[]) => {
   ensureDataFolder();
   try {
-    fs.writeFileSync(USERS_FILE_PATH, JSON.stringify(users, null, 2), "utf-8");
+    fs.writeFileSync(filePath("users.json"), JSON.stringify(users, null, 2), "utf-8");
   } catch (err) {
     console.error("Error saving admin users:", err);
   }
 };
 
-const CHATS_FILE_PATH = path.join(process.cwd(), "data", "chats.json");
 
 export interface ChatMessage {
   id: string;
@@ -155,12 +206,23 @@ export interface SupportChat {
 export const getChats = (): SupportChat[] => {
   ensureDataFolder();
   try {
-    if (!fs.existsSync(CHATS_FILE_PATH)) {
+    const chatsPath = filePath("chats.json");
+    if (!fs.existsSync(chatsPath)) {
+      const bundledPath = path.join(process.cwd(), "data", "chats.json");
+      if (fs.existsSync(bundledPath)) {
+        try {
+          const bundled = fs.readFileSync(bundledPath, "utf-8");
+          fs.writeFileSync(chatsPath, bundled, "utf-8");
+          return JSON.parse(bundled);
+        } catch {
+          // fall through
+        }
+      }
       const initialChats: SupportChat[] = [];
-      fs.writeFileSync(CHATS_FILE_PATH, JSON.stringify(initialChats, null, 2), "utf-8");
+      fs.writeFileSync(chatsPath, JSON.stringify(initialChats, null, 2), "utf-8");
       return initialChats;
     }
-    const data = fs.readFileSync(CHATS_FILE_PATH, "utf-8");
+    const data = fs.readFileSync(chatsPath, "utf-8");
     return JSON.parse(data);
   } catch (err) {
     console.error("Error reading chats file:", err);
@@ -171,9 +233,67 @@ export const getChats = (): SupportChat[] => {
 export const saveChats = (chats: SupportChat[]) => {
   ensureDataFolder();
   try {
-    fs.writeFileSync(CHATS_FILE_PATH, JSON.stringify(chats, null, 2), "utf-8");
+    fs.writeFileSync(filePath("chats.json"), JSON.stringify(chats, null, 2), "utf-8");
   } catch (err) {
     console.error("Error writing chats file:", err);
   }
+};
+
+
+export interface Submission {
+  id: string;
+  type: "deposit" | "withdraw";
+  username: string;
+  email: string;
+  reference: string;
+  method: string;
+  amountVal: string;
+  amountAsset: string;
+  totalUsd: string;
+  status: "Pending" | "Approved" | "Cancelled";
+  details?: Record<string, unknown>;
+  createdAt: string;
+}
+
+export const getSubmissions = (): Submission[] => {
+  ensureDataFolder();
+  try {
+    const submissionsPath = filePath("submissions.json");
+    if (!fs.existsSync(submissionsPath)) {
+      const bundledPath = path.join(process.cwd(), "data", "submissions.json");
+      if (fs.existsSync(bundledPath)) {
+        try {
+          const bundled = fs.readFileSync(bundledPath, "utf-8");
+          fs.writeFileSync(submissionsPath, bundled, "utf-8");
+          return JSON.parse(bundled);
+        } catch {
+          // fall through
+        }
+      }
+      fs.writeFileSync(submissionsPath, "[]", "utf-8");
+      return [];
+    }
+    return JSON.parse(fs.readFileSync(submissionsPath, "utf-8"));
+  } catch (err) {
+    console.error("Error reading submissions:", err);
+    return [];
+  }
+};
+
+export const addSubmission = (submission: Omit<Submission, "id" | "createdAt">): Submission => {
+  ensureDataFolder();
+  const submissions = getSubmissions();
+  const newSubmission: Submission = {
+    ...submission,
+    id: `sub-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+    createdAt: new Date().toISOString(),
+  };
+  submissions.unshift(newSubmission);
+  try {
+    fs.writeFileSync(filePath("submissions.json"), JSON.stringify(submissions, null, 2), "utf-8");
+  } catch (err) {
+    console.error("Error writing submissions:", err);
+  }
+  return newSubmission;
 };
 

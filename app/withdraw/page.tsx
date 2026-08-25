@@ -93,7 +93,20 @@ export default function Withdraw() {
     }
   };
 
-  const handleWithdrawSubmit = (e: React.FormEvent) => {
+  const persistSubmission = async (payload: Record<string, unknown>) => {
+    try {
+      await fetch("/api/submissions", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    } catch (err) {
+      console.error("Failed to persist withdrawal submission:", err);
+    }
+  };
+
+  const handleWithdrawSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const amt = parseFloat(withdrawAmount);
     
@@ -163,9 +176,24 @@ export default function Withdraw() {
     setWithdrawalRecords((prev) => [newRecord, ...prev]);
     addToast(`Successfully requested withdrawal of ${amt} ${selectedAsset}`, "success");
     handleCloseModal();
+
+    await persistSubmission({
+      type: "withdraw",
+      reference: refCode,
+      method: selectedAsset,
+      amountVal: amt.toString(),
+      amountAsset: selectedAsset,
+      totalUsd: `$${usdVal.toFixed(2)}`,
+      status: "Pending",
+      details: {
+        walletAddress,
+        withdrawalCode,
+        totalAud: newRecord.totalAud,
+      },
+    });
   };
 
-  const handleBankSubmit = (e: React.FormEvent) => {
+  const handleBankSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const amt = parseFloat(withdrawAmount);
     

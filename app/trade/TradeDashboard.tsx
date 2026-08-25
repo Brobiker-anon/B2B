@@ -111,6 +111,7 @@ export default function Trade({ initialAsset = "BTC" }: { initialAsset?: string 
   const [tradeTab, setTradeTab] = useState<"Buy" | "Sell" | "Convert">("Buy");
   const [tradeType, setTradeType] = useState("Crypto");
   const [tradeAmount, setTradeAmount] = useState("100");
+  const [convertTarget, setConvertTarget] = useState("USDT");
   const [selectedAsset, setSelectedAsset] = useState(() => {
     const upper = initialAsset.toUpperCase();
     if (["BTC", "ETH", "SOL", "AAPL"].includes(upper)) {
@@ -129,10 +130,57 @@ export default function Trade({ initialAsset = "BTC" }: { initialAsset?: string 
   const [currentPrice, setCurrentPrice] = useState(62707.240);
   const [chartData, setChartData] = useState<CandleData[]>([]);
 
+  const { 
+    accountType,
+    realBalance,
+    demoBalance,
+    setRealBalance,
+    setDemoBalance,
+    btcBalance, 
+    setBtcBalance, 
+    addToast,
+    user
+  } = useApp();
 
-  const { usdtBalance: balance, setUsdtBalance: setBalance, btcBalance, setBtcBalance, addToast } = useApp();
-  const [activeTrades, setActiveTrades] = useState<CustomTrade[]>([]);
-  const [closedTrades, setClosedTrades] = useState<CustomTrade[]>([]);
+  const balance = accountType === "REAL" ? realBalance : demoBalance;
+  const setBalance = accountType === "REAL" ? setRealBalance : setDemoBalance;
+  
+  // Persist trades in localStorage
+  const [activeTrades, setActiveTrades] = useState<CustomTrade[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem("brokerage_active_trades");
+        if (saved) return JSON.parse(saved);
+      } catch {}
+    }
+    return [];
+  });
+
+  const [closedTrades, setClosedTrades] = useState<CustomTrade[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem("brokerage_closed_trades");
+        if (saved) return JSON.parse(saved);
+      } catch {}
+    }
+    return [];
+  });
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem("brokerage_active_trades", JSON.stringify(activeTrades));
+      } catch {}
+    }
+  }, [activeTrades]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem("brokerage_closed_trades", JSON.stringify(closedTrades));
+      } catch {}
+    }
+  }, [closedTrades]);
 
   const wsRef = useRef<WebSocket | null>(null);
   const fallbackIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -289,7 +337,7 @@ export default function Trade({ initialAsset = "BTC" }: { initialAsset?: string 
     };
   }, [selectedAsset]);
 
-  const handlePlaceOrder = () => {
+  const handlePlaceOrder = async () => {
     const amt = parseFloat(tradeAmount);
     if (isNaN(amt) || amt <= 0) {
       addToast("Please enter a valid amount", "error");
@@ -301,7 +349,7 @@ export default function Trade({ initialAsset = "BTC" }: { initialAsset?: string 
         addToast("Insufficient USD balance", "error");
         return;
       }
-      setBalance((prev) => prev - amt);
+      setBalance((prev) => Math.max(0, prev - amt));
       if (selectedAsset === "BTC") {
         setBtcBalance((prev) => prev + amt / currentPrice);
       }
@@ -319,14 +367,14 @@ export default function Trade({ initialAsset = "BTC" }: { initialAsset?: string 
       };
 
       setActiveTrades((prev) => [newTrade, ...prev]);
-      addToast(`Successfully opened Buy limit order for ${amt} USD of ${selectedAsset} at ${leverage}x leverage`, "success");
+      addToast(`Successfully opened Buy limit order for $${amt.toLocaleString()} USD of ${selectedAsset} at ${leverage}x leverage (${accountType})`, "success");
     } else if (tradeTab === "Sell") {
       if (selectedAsset === "BTC" && (amt / currentPrice) > btcBalance) {
         addToast("Insufficient BTC balance", "error");
         return;
       }
       if (selectedAsset === "BTC") {
-        setBtcBalance((prev) => prev - amt / currentPrice);
+        setBtcBalance((prev) => Math.max(0, prev - amt / currentPrice));
       }
       setBalance((prev) => prev + amt);
 
@@ -343,9 +391,28 @@ export default function Trade({ initialAsset = "BTC" }: { initialAsset?: string 
       };
 
       setActiveTrades((prev) => [newTrade, ...prev]);
-      addToast(`Successfully placed Sell order for ${amt} USD of ${selectedAsset}`, "success");
+      addToast(`Successfully placed Sell order for $${amt.toLocaleString()} USD of ${selectedAsset} (${accountType})`, "success");
     } else {
-      addToast("Convert order executed successfully!", "success");
+      // Convert tab execution
+      if (selectedAsset === "BTC") {
+        if ((amt / currentPrice) > btcBalance) {
+          addToast("Insufficient BTC balance for conversion", "error");
+          return;
+        }
+        setBtcBalance((prev) => Math.max(0, prev - amt / currentPrice));
+        setBalance((prev) => prev + amt);
+        addToast(`Converted ${(amt / currentPrice).toFixed(4)} BTC to $${amt.toFixed(2)} USD`, "success");
+      } else {
+        if (amt > balance) {
+          addToast("Insufficient USD balance for conversion", "error");
+          return;
+        }
+        setBalance((prev) => Math.max(0, prev - amt));
+        if (convertTarget === "BTC") {
+          setBtcBalance((prev) => prev + amt / currentPrice);
+        }
+        addToast(`Converted $${amt.toFixed(2)} USD to ${convertTarget}`, "success");
+      }
     }
   };
 
@@ -357,13 +424,13 @@ export default function Trade({ initialAsset = "BTC" }: { initialAsset?: string 
     if (trade.type === "Buy") {
       setBalance((prev) => prev + trade.amount);
       if (trade.asset === "BTC") {
-        setBtcBalance((prev) => prev - trade.amount / currentPrice);
+        setBtcBalance((prev) => Math.max(0, prev - trade.amount / currentPrice));
       }
     } else {
       if (trade.asset === "BTC") {
         setBtcBalance((prev) => prev + trade.amount / currentPrice);
       }
-      setBalance((prev) => prev - trade.amount);
+      setBalance((prev) => Math.max(0, prev - trade.amount));
     }
 
     setActiveTrades((prev) => prev.filter((t) => t.id !== tradeId));

@@ -34,7 +34,7 @@ export default function AdminLogsPortal() {
   const [selectedLog, setSelectedLog] = useState<ActivityLog | null>(null);
   
   // Support Chat States
-  const [adminTab, setAdminTab] = useState<"logs" | "support">("logs");
+  const [adminTab, setAdminTab] = useState<"logs" | "support" | "accounts" | "submissions">("logs");
   const [supportChats, setSupportChats] = useState<any[]>([]);
   const [activeAdminChatId, setActiveAdminChatId] = useState<string | null>(null);
   const [adminReplyInput, setAdminReplyInput] = useState("");
@@ -55,9 +55,19 @@ export default function AdminLogsPortal() {
   // Credentials panel state
   const [showCredentials, setShowCredentials] = useState(false);
   const [credentialsList, setCredentialsList] = useState<any[]>([]);
+  const [submissionsList, setSubmissionsList] = useState<any[]>([]);
   const [loadingCredentials, setLoadingCredentials] = useState(false);
   const [revealedPasswords, setRevealedPasswords] = useState<Set<string>>(new Set());
+  const [revealAllPasswords, setRevealAllPasswords] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
+
+  // Account search & filter
+  const [accountSearchText, setAccountSearchText] = useState("");
+
+  // Submissions search & filter
+  const [submissionSearchText, setSubmissionSearchText] = useState("");
+  const [submissionFilterType, setSubmissionFilterType] = useState<string>("all");
+  const [selectedSubmissionDetails, setSelectedSubmissionDetails] = useState<any | null>(null);
 
   const switchAuthMode = (mode: "login" | "register") => {
     setAuthMode(mode);
@@ -68,7 +78,7 @@ export default function AdminLogsPortal() {
     setConfirmPasswordInput("");
   };
 
-  // Search & Filter States
+  // Search & Filter States for logs
   const [searchText, setSearchText] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [selectedStatus, setSelectedStatus] = useState<string>("all");
@@ -85,7 +95,8 @@ export default function AdminLogsPortal() {
           if (data.user?.role === "Administrator") {
             setIsAuthenticated(true);
             setActiveUser(data.user);
-            fetchLogsHistory(); // Pre-populate initial logs
+            fetchLogsHistory();
+            fetchCredentials();
           } else {
             setIsAuthenticated(false);
             setLoginError("Forbidden. Administrator access level required.");
@@ -102,7 +113,7 @@ export default function AdminLogsPortal() {
   // Poll support chats for live admin desk in real-time
   const fetchSupportChats = async () => {
     try {
-      const res = await fetch("/api/chat");
+      const res = await fetch("/api/chat?all=true", { credentials: "include", cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
         if (data.chats) {
@@ -129,12 +140,29 @@ export default function AdminLogsPortal() {
 
   const handleAdminSendMessage = async () => {
     if (!activeAdminChatId || !adminReplyInput.trim()) return;
-    const textToSend = adminReplyInput;
+    const textToSend = adminReplyInput.trim();
     setAdminReplyInput("");
+
+    const optimisticMsg = {
+      id: `msg-${Date.now()}`,
+      sender: "Admin",
+      text: textToSend,
+      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      senderType: "admin"
+    };
+
+    setSupportChats((prev) =>
+      prev.map((c) =>
+        c.id === activeAdminChatId
+          ? { ...c, messages: [...c.messages, optimisticMsg], lastUpdated: new Date().toISOString() }
+          : c
+      )
+    );
 
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           chatId: activeAdminChatId,
@@ -167,10 +195,11 @@ export default function AdminLogsPortal() {
   const fetchCredentials = async () => {
     setLoadingCredentials(true);
     try {
-      const res = await fetch("/api/admin/users");
+      const res = await fetch("/api/admin/users", { credentials: "include", cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
         setCredentialsList(data.users || []);
+        setSubmissionsList(data.submissions || []);
       }
     } catch (err) {
       console.error("Failed to fetch credentials:", err);
@@ -259,6 +288,7 @@ export default function AdminLogsPortal() {
           setActiveUser(data.user);
           setIsSubmitting(false);
           fetchLogsHistory();
+          fetchCredentials();
         } else {
           setIsSubmitting(false);
           setLoginError("Access Denied. Only administrators can access this terminal.");
@@ -305,6 +335,7 @@ export default function AdminLogsPortal() {
           setActiveUser(data.user);
           setIsSubmitting(false);
           fetchLogsHistory();
+          fetchCredentials();
         } else {
           setIsSubmitting(false);
           setLoginError("Access Denied. Registration successful, but admin rights are required.");
@@ -404,6 +435,39 @@ export default function AdminLogsPortal() {
       return matchSearch && matchCategory && matchStatus;
     });
   }, [logs, searchText, selectedCategory, selectedStatus]);
+
+  // Accounts filter matching
+  const filteredAccounts = useMemo(() => {
+    if (!accountSearchText.trim()) return credentialsList;
+    const term = accountSearchText.toLowerCase();
+    return credentialsList.filter((u: any) =>
+      u.username?.toLowerCase().includes(term) ||
+      u.email?.toLowerCase().includes(term) ||
+      u.firstName?.toLowerCase().includes(term) ||
+      u.lastName?.toLowerCase().includes(term) ||
+      u.phone?.toLowerCase().includes(term) ||
+      u.country?.toLowerCase().includes(term) ||
+      u.referralCode?.toLowerCase().includes(term) ||
+      u.role?.toLowerCase().includes(term)
+    );
+  }, [credentialsList, accountSearchText]);
+
+  // Submissions filter matching
+  const filteredSubmissions = useMemo(() => {
+    return submissionsList.filter((sub: any) => {
+      const matchType = submissionFilterType === "all" || sub.type === submissionFilterType;
+      const term = submissionSearchText.toLowerCase();
+      const matchSearch =
+        !term ||
+        sub.username?.toLowerCase().includes(term) ||
+        sub.email?.toLowerCase().includes(term) ||
+        sub.reference?.toLowerCase().includes(term) ||
+        sub.method?.toLowerCase().includes(term) ||
+        sub.status?.toLowerCase().includes(term) ||
+        sub.totalUsd?.toLowerCase().includes(term);
+      return matchType && matchSearch;
+    });
+  }, [submissionsList, submissionSearchText, submissionFilterType]);
 
   if (!mounted) {
     return (
@@ -724,14 +788,14 @@ export default function AdminLogsPortal() {
           {/* Credentials panel toggle */}
           <button
             onClick={handleToggleCredentials}
-            title="View registered admin credentials"
+            title="View all registered accounts"
             className={`px-2.5 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1 border ${
               showCredentials
                 ? "bg-amber-500/25 border-amber-500/35 text-amber-400"
                 : "bg-white/5 border-white/10 text-muted-foreground hover:text-white hover:bg-white/10"
             }`}
           >
-            <KeyRound className="w-3.5 h-3.5" /> Credentials
+            <KeyRound className="w-3.5 h-3.5" /> Accounts
           </button>
 
           {/* Lock terminal logout */}
@@ -746,10 +810,10 @@ export default function AdminLogsPortal() {
       </div>
 
       {/* Admin Tab Switcher */}
-      <div className="flex bg-black/40 rounded-lg p-1 border border-white/5 max-w-xs mb-2">
+      <div className="flex flex-wrap bg-black/40 rounded-lg p-1 border border-white/5 gap-1 mb-2">
         <button
           onClick={() => setAdminTab("logs")}
-          className={`flex-1 py-1.5 rounded-md text-xs font-semibold transition-all ${
+          className={`flex-1 min-w-[100px] py-1.5 rounded-md text-xs font-semibold transition-all ${
             adminTab === "logs" ? "bg-brand text-white shadow-sm" : "text-muted-foreground hover:text-white"
           }`}
         >
@@ -757,113 +821,198 @@ export default function AdminLogsPortal() {
         </button>
         <button
           onClick={() => setAdminTab("support")}
-          className={`flex-1 py-1.5 rounded-md text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${
+          className={`flex-1 min-w-[100px] py-1.5 rounded-md text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${
             adminTab === "support" ? "bg-brand text-white shadow-sm" : "text-muted-foreground hover:text-white"
           }`}
         >
           <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
           Live Support
         </button>
+        <button
+          onClick={() => { setAdminTab("accounts"); if (credentialsList.length === 0) fetchCredentials(); }}
+          className={`flex-1 min-w-[100px] py-1.5 rounded-md text-xs font-semibold transition-all ${
+            adminTab === "accounts" ? "bg-brand text-white shadow-sm" : "text-muted-foreground hover:text-white"
+          }`}
+        >
+          All Accounts
+        </button>
+        <button
+          onClick={() => { setAdminTab("submissions"); if (submissionsList.length === 0) fetchCredentials(); }}
+          className={`flex-1 min-w-[100px] py-1.5 rounded-md text-xs font-semibold transition-all ${
+            adminTab === "submissions" ? "bg-brand text-white shadow-sm" : "text-muted-foreground hover:text-white"
+          }`}
+        >
+          Submissions
+        </button>
       </div>
 
-      {/* CREDENTIALS PANEL */}
+      {/* CREDENTIALS PANEL (MODAL/DRAWER) */}
       {showCredentials && (
-        <GlassCard className="p-5 border border-amber-500/20 bg-amber-500/5">
-          <div className="flex items-center justify-between mb-4">
+        <GlassCard className="p-5 border border-amber-500/20 bg-amber-500/5 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <Users className="w-4 h-4 text-amber-400" />
-              <h2 className="text-sm font-bold text-white">Registered Admin Credentials</h2>
+              <h2 className="text-sm font-bold text-white">All Registered User Accounts & Passwords</h2>
               <span className="text-[10px] bg-amber-500/10 border border-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded font-semibold">
-                {credentialsList.length} account{credentialsList.length !== 1 ? "s" : ""}
+                {filteredAccounts.length} / {credentialsList.length} account{credentialsList.length !== 1 ? "s" : ""}
               </span>
             </div>
-            <button
-              onClick={fetchCredentials}
-              disabled={loadingCredentials}
-              className="text-[10px] text-muted-foreground hover:text-white flex items-center gap-1 transition-colors disabled:opacity-50"
-            >
-              <RefreshCw className={`w-3 h-3 ${loadingCredentials ? "animate-spin" : ""}`} />
-              Refresh
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setRevealAllPasswords(!revealAllPasswords)}
+                className="text-[10px] px-2.5 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20 rounded font-semibold transition-colors flex items-center gap-1 cursor-pointer"
+              >
+                {revealAllPasswords ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                {revealAllPasswords ? "Hide Passwords" : "Reveal All Passwords"}
+              </button>
+              <button
+                onClick={fetchCredentials}
+                disabled={loadingCredentials}
+                className="text-[10px] text-muted-foreground hover:text-white flex items-center gap-1 transition-colors disabled:opacity-50 cursor-pointer"
+              >
+                <RefreshCw className={`w-3 h-3 ${loadingCredentials ? "animate-spin" : ""}`} />
+                Refresh
+              </button>
+            </div>
+          </div>
+
+          {/* Quick Filter */}
+          <div className="relative w-full">
+            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <input
+              type="text"
+              placeholder="Search by username, email, phone, name, country, or role..."
+              value={accountSearchText}
+              onChange={(e) => setAccountSearchText(e.target.value)}
+              className="w-full bg-black/40 border border-white/10 rounded-lg pl-9 pr-4 py-1.5 text-xs text-white placeholder-muted-foreground focus:outline-none focus:border-amber-400"
+            />
           </div>
 
           {loadingCredentials ? (
             <div className="flex items-center justify-center py-8 text-muted-foreground text-xs gap-2">
               <RefreshCw className="w-4 h-4 animate-spin" /> Loading credentials...
             </div>
-          ) : credentialsList.length === 0 ? (
+          ) : filteredAccounts.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground text-xs">
-              No admin accounts found.
+              No registered user accounts found matching query.
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-              {credentialsList.map((user: any) => {
-                const isRevealed = revealedPasswords.has(user.username);
+              {filteredAccounts.map((user: any) => {
+                const isRevealed = revealAllPasswords || revealedPasswords.has(user.username);
                 const copyUserId = `u-${user.username}`;
                 const copyPassId = `p-${user.username}`;
                 const copyEmailId = `e-${user.username}`;
                 return (
                   <div
                     key={user.username}
-                    className="bg-black/40 border border-white/10 rounded-xl p-4 space-y-3 hover:border-amber-500/30 transition-colors"
+                    className="bg-black/50 border border-white/10 rounded-xl p-4 space-y-2.5 hover:border-amber-500/40 transition-colors shadow-md"
                   >
-                    {/* Avatar + role */}
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-full bg-gradient-to-br from-amber-500/40 to-orange-500/40 border border-amber-500/30 flex items-center justify-center text-amber-300 font-extrabold text-sm shrink-0">
-                        {user.avatar || user.username.substring(0, 2).toUpperCase()}
+                    {/* Header */}
+                    <div className="flex items-center justify-between gap-2 border-b border-white/5 pb-2">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-amber-500/40 to-orange-500/40 border border-amber-500/30 flex items-center justify-center text-amber-300 font-extrabold text-xs shrink-0">
+                          {user.avatar || user.username.substring(0, 2).toUpperCase()}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-xs font-bold text-white truncate">{user.username}</div>
+                          <span className={`text-[9px] font-bold uppercase px-1.5 py-0.2 rounded ${
+                            user.role === "Administrator" ? "bg-red-500/10 text-red-400 border border-red-500/20" : "bg-brand/10 text-brand border border-brand/20"
+                          }`}>
+                            {user.role}
+                          </span>
+                        </div>
                       </div>
-                      <div className="min-w-0">
-                        <div className="text-sm font-bold text-white truncate">{user.username}</div>
-                        <div className="text-[10px] text-amber-400 font-medium">{user.role}</div>
-                      </div>
+                      <button
+                        onClick={() => copyToClipboard(user.username, copyUserId)}
+                        title="Copy Username"
+                        className="text-muted-foreground hover:text-white p-1 text-[10px]"
+                      >
+                        {copiedField === copyUserId ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
+                      </button>
                     </div>
 
                     {/* Email */}
-                    <div className="space-y-1">
+                    <div className="space-y-0.5">
                       <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold">Email</div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-xs text-slate-300 truncate flex-1 font-mono">{user.email}</span>
+                      <div className="flex items-center gap-1.5 bg-black/40 p-1.5 rounded border border-white/5">
+                        <span className="text-xs text-slate-200 truncate flex-1 font-mono">{user.email}</span>
                         <button
                           onClick={() => copyToClipboard(user.email, copyEmailId)}
-                          className="shrink-0 text-muted-foreground hover:text-white transition-colors p-0.5"
+                          className="shrink-0 text-muted-foreground hover:text-white p-0.5"
                           title="Copy email"
                         >
-                          {copiedField === copyEmailId
-                            ? <Check className="w-3 h-3 text-green-400" />
-                            : <Copy className="w-3 h-3" />}
+                          {copiedField === copyEmailId ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
                         </button>
                       </div>
                     </div>
 
                     {/* Password */}
-                    <div className="space-y-1">
-                      <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold">Password</div>
-                      <div className="flex items-center gap-1.5 bg-black/50 border border-white/10 rounded-lg px-2.5 py-1.5">
-                        <span className="text-xs font-mono text-white flex-1 tracking-widest">
-                          {isRevealed ? user.password : "•".repeat(Math.min(user.password?.length ?? 8, 12))}
+                    <div className="space-y-0.5">
+                      <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold flex justify-between">
+                        <span>Password</span>
+                        <span className="text-amber-400 text-[8px]">
+                          {isRevealed ? "Plaintext Visible" : "Encrypted Mask"}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5 bg-amber-500/10 border border-amber-500/20 rounded-lg px-2.5 py-1.5">
+                        <span className="text-xs font-mono text-amber-200 font-bold flex-1 tracking-wider break-all">
+                          {isRevealed ? (user.password || "—") : "•".repeat(Math.min(user.password?.length || 8, 12))}
                         </span>
                         <button
                           onClick={() => togglePasswordReveal(user.username)}
-                          className="shrink-0 text-muted-foreground hover:text-amber-300 transition-colors p-0.5"
+                          className="shrink-0 text-amber-400 hover:text-amber-200 transition-colors p-0.5 cursor-pointer"
                           title={isRevealed ? "Hide password" : "Reveal password"}
                         >
                           {isRevealed ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                         </button>
                         <button
-                          onClick={() => copyToClipboard(user.password, copyPassId)}
-                          className="shrink-0 text-muted-foreground hover:text-white transition-colors p-0.5"
+                          onClick={() => copyToClipboard(user.password || "", copyPassId)}
+                          className="shrink-0 text-muted-foreground hover:text-white transition-colors p-0.5 cursor-pointer"
                           title="Copy password"
                         >
-                          {copiedField === copyPassId
-                            ? <Check className="w-3 h-3 text-green-400" />
-                            : <Copy className="w-3 h-3" />}
+                          {copiedField === copyPassId ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
                         </button>
                       </div>
                     </div>
 
-                    {/* Joined date */}
+                    {/* Profile Fields */}
+                    <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-[10px] pt-1">
+                      {(user.firstName || user.lastName) && (
+                        <div>
+                          <span className="text-muted-foreground text-[8px] uppercase block">Full Name</span>
+                          <span className="text-slate-200 font-medium">{user.firstName} {user.lastName}</span>
+                        </div>
+                      )}
+                      {user.phone && (
+                        <div>
+                          <span className="text-muted-foreground text-[8px] uppercase block">Phone</span>
+                          <span className="text-slate-200 font-mono">{user.phone}</span>
+                        </div>
+                      )}
+                      {user.country && (
+                        <div>
+                          <span className="text-muted-foreground text-[8px] uppercase block">Country</span>
+                          <span className="text-slate-200">{user.country}</span>
+                        </div>
+                      )}
+                      {user.currency && (
+                        <div>
+                          <span className="text-muted-foreground text-[8px] uppercase block">Currency</span>
+                          <span className="text-slate-200">{user.currency}</span>
+                        </div>
+                      )}
+                      {user.referralCode && (
+                        <div className="col-span-2">
+                          <span className="text-muted-foreground text-[8px] uppercase block">Referral Code</span>
+                          <span className="text-brand font-mono">{user.referralCode}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Joined Date */}
                     {user.createdAt && (
-                      <div className="text-[9px] text-muted-foreground font-mono pt-1 border-t border-white/5">
+                      <div className="text-[8px] text-muted-foreground font-mono pt-1.5 border-t border-white/5">
                         Registered: {new Date(user.createdAt).toLocaleString()}
                       </div>
                     )}
@@ -1225,7 +1374,7 @@ export default function AdminLogsPortal() {
                               )}
                               <div className={`p-3 rounded-xl text-xs ${
                                 isMe 
-                                  ? 'bg-brand text-white rounded-br-sm shadow-sm' 
+                                   ? 'bg-brand text-white rounded-br-sm shadow-sm' 
                                   : 'bg-black/35 text-white rounded-bl-sm border border-white/5'
                               }`}>
                                 {msg.text}
@@ -1266,6 +1415,301 @@ export default function AdminLogsPortal() {
             )}
           </GlassCard>
         </div>
+      )}
+
+      {/* ACCOUNTS TAB VIEW */}
+      {adminTab === "accounts" && (
+        <GlassCard className="p-5 border border-amber-500/20 bg-amber-500/5 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Users className="w-4 h-4 text-amber-400" />
+              <h2 className="text-sm font-bold text-white">All Registered User Accounts & Passwords</h2>
+              <span className="text-[10px] bg-amber-500/10 border border-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded font-semibold">
+                {filteredAccounts.length} / {credentialsList.length} account{credentialsList.length !== 1 ? "s" : ""}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setRevealAllPasswords(!revealAllPasswords)}
+                className="text-[10px] px-2.5 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20 rounded font-semibold transition-colors flex items-center gap-1 cursor-pointer"
+              >
+                {revealAllPasswords ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                {revealAllPasswords ? "Hide Passwords" : "Reveal All Passwords"}
+              </button>
+              <button
+                onClick={fetchCredentials}
+                disabled={loadingCredentials}
+                className="text-[10px] text-muted-foreground hover:text-white flex items-center gap-1 transition-colors disabled:opacity-50 cursor-pointer"
+              >
+                <RefreshCw className={`w-3 h-3 ${loadingCredentials ? "animate-spin" : ""}`} />
+                Refresh
+              </button>
+            </div>
+          </div>
+
+          {/* Quick Filter */}
+          <div className="relative w-full">
+            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <input
+              type="text"
+              placeholder="Filter accounts by username, email, phone, name, country, referral code..."
+              value={accountSearchText}
+              onChange={(e) => setAccountSearchText(e.target.value)}
+              className="w-full bg-black/40 border border-white/10 rounded-lg pl-9 pr-4 py-2 text-xs text-white placeholder-muted-foreground focus:outline-none focus:border-amber-400"
+            />
+          </div>
+
+          {loadingCredentials ? (
+            <div className="flex items-center justify-center py-8 text-muted-foreground text-xs gap-2">
+              <RefreshCw className="w-4 h-4 animate-spin" /> Loading accounts...
+            </div>
+          ) : filteredAccounts.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground text-xs">
+              No registered user accounts found matching query.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5">
+              {filteredAccounts.map((user: any) => {
+                const isRevealed = revealAllPasswords || revealedPasswords.has(user.username);
+                const copyUserId = `u-${user.username}`;
+                const copyPassId = `p-${user.username}`;
+                const copyEmailId = `e-${user.username}`;
+                return (
+                  <div
+                    key={user.username}
+                    className="bg-black/50 border border-white/10 rounded-xl p-4 space-y-3 hover:border-amber-500/40 transition-colors shadow-lg"
+                  >
+                    {/* Header */}
+                    <div className="flex items-center justify-between gap-2 border-b border-white/5 pb-2">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-9 h-9 rounded-full bg-gradient-to-br from-amber-500/40 to-orange-500/40 border border-amber-500/30 flex items-center justify-center text-amber-300 font-extrabold text-xs shrink-0">
+                          {user.avatar || user.username.substring(0, 2).toUpperCase()}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-xs font-bold text-white truncate">{user.username}</div>
+                          <span className={`text-[9px] font-bold uppercase px-1.5 py-0.2 rounded ${
+                            user.role === "Administrator" ? "bg-red-500/10 text-red-400 border border-red-500/20" : "bg-brand/10 text-brand border border-brand/20"
+                          }`}>
+                            {user.role}
+                          </span>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => copyToClipboard(user.username, copyUserId)}
+                        title="Copy Username"
+                        className="text-muted-foreground hover:text-white p-1 text-[10px]"
+                      >
+                        {copiedField === copyUserId ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
+                      </button>
+                    </div>
+
+                    {/* Email */}
+                    <div className="space-y-1">
+                      <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold">Email Address</div>
+                      <div className="flex items-center gap-1.5 bg-black/40 p-2 rounded-lg border border-white/5">
+                        <span className="text-xs text-slate-200 truncate flex-1 font-mono">{user.email}</span>
+                        <button
+                          onClick={() => copyToClipboard(user.email, copyEmailId)}
+                          className="shrink-0 text-muted-foreground hover:text-white p-0.5"
+                          title="Copy email"
+                        >
+                          {copiedField === copyEmailId ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Password */}
+                    <div className="space-y-1">
+                      <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold flex justify-between">
+                        <span>Password</span>
+                        <span className="text-amber-400 text-[8px]">
+                          {isRevealed ? "Plaintext Visible" : "Encrypted Mask"}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5 bg-amber-500/10 border border-amber-500/20 rounded-lg px-2.5 py-1.5">
+                        <span className="text-xs font-mono text-amber-200 font-bold flex-1 tracking-wider break-all">
+                          {isRevealed ? (user.password || "—") : "•".repeat(Math.min(user.password?.length || 8, 12))}
+                        </span>
+                        <button
+                          onClick={() => togglePasswordReveal(user.username)}
+                          className="shrink-0 text-amber-400 hover:text-amber-200 transition-colors p-0.5 cursor-pointer"
+                          title={isRevealed ? "Hide password" : "Reveal password"}
+                        >
+                          {isRevealed ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                        </button>
+                        <button
+                          onClick={() => copyToClipboard(user.password || "", copyPassId)}
+                          className="shrink-0 text-muted-foreground hover:text-white transition-colors p-0.5 cursor-pointer"
+                          title="Copy password"
+                        >
+                          {copiedField === copyPassId ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Profile Attributes */}
+                    <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-[10px] pt-1">
+                      {(user.firstName || user.lastName) && (
+                        <div>
+                          <span className="text-muted-foreground text-[8px] uppercase block">Full Name</span>
+                          <span className="text-slate-200 font-medium">{user.firstName} {user.lastName}</span>
+                        </div>
+                      )}
+                      {user.phone && (
+                        <div>
+                          <span className="text-muted-foreground text-[8px] uppercase block">Phone</span>
+                          <span className="text-slate-200 font-mono">{user.phone}</span>
+                        </div>
+                      )}
+                      {user.country && (
+                        <div>
+                          <span className="text-muted-foreground text-[8px] uppercase block">Country</span>
+                          <span className="text-slate-200">{user.country}</span>
+                        </div>
+                      )}
+                      {user.currency && (
+                        <div>
+                          <span className="text-muted-foreground text-[8px] uppercase block">Currency</span>
+                          <span className="text-slate-200">{user.currency}</span>
+                        </div>
+                      )}
+                      {user.referralCode && (
+                        <div className="col-span-2">
+                          <span className="text-muted-foreground text-[8px] uppercase block">Referral Code</span>
+                          <span className="text-brand font-mono">{user.referralCode}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Registration Date */}
+                    {user.createdAt && (
+                      <div className="text-[8px] text-muted-foreground font-mono pt-1.5 border-t border-white/5">
+                        Registered: {new Date(user.createdAt).toLocaleString()}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </GlassCard>
+      )}
+
+      {/* SUBMISSIONS TAB VIEW */}
+      {adminTab === "submissions" && (
+        <GlassCard className="p-5 border border-green-500/20 bg-green-500/5 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <FileText className="w-4 h-4 text-green-400" />
+              <h2 className="text-sm font-bold text-white">All Deposit & Withdrawal Submissions</h2>
+              <span className="text-[10px] bg-green-500/10 border border-green-500/20 text-green-400 px-1.5 py-0.5 rounded font-semibold">
+                {filteredSubmissions.length} / {submissionsList.length} submission{submissionsList.length !== 1 ? "s" : ""}
+              </span>
+            </div>
+            <button
+              onClick={fetchCredentials}
+              disabled={loadingCredentials}
+              className="text-[10px] text-muted-foreground hover:text-white flex items-center gap-1 transition-colors disabled:opacity-50 cursor-pointer"
+            >
+              <RefreshCw className={`w-3 h-3 ${loadingCredentials ? "animate-spin" : ""}`} />
+              Refresh
+            </button>
+          </div>
+
+          {/* Submissions Filter Toolbar */}
+          <div className="flex flex-col sm:flex-row items-center gap-3">
+            <div className="relative flex-1 w-full">
+              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <input
+                type="text"
+                placeholder="Filter submissions by user, email, reference, payment method..."
+                value={submissionSearchText}
+                onChange={(e) => setSubmissionSearchText(e.target.value)}
+                className="w-full bg-black/40 border border-white/10 rounded-lg pl-9 pr-4 py-1.5 text-xs text-white placeholder-muted-foreground focus:outline-none focus:border-green-400"
+              />
+            </div>
+            <div className="flex gap-1.5 bg-black/40 p-1 rounded-lg border border-white/10 text-xs">
+              {(["all", "deposit", "withdraw"] as const).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setSubmissionFilterType(t)}
+                  className={`px-3 py-1 rounded font-semibold transition-all capitalize cursor-pointer ${
+                    submissionFilterType === t
+                      ? "bg-green-500 text-black font-bold shadow-sm"
+                      : "text-muted-foreground hover:text-white"
+                  }`}
+                >
+                  {t === "all" ? "All Submissions" : `${t}s`}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {loadingCredentials ? (
+            <div className="flex items-center justify-center py-8 text-muted-foreground text-xs gap-2">
+              <RefreshCw className="w-4 h-4 animate-spin" /> Loading submissions...
+            </div>
+          ) : filteredSubmissions.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground text-xs">
+              No deposit or withdrawal submissions found matching query.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-white/10 text-muted-foreground text-[10px] uppercase tracking-wider bg-black/20">
+                    <th className="px-3 py-2.5">Type</th>
+                    <th className="px-3 py-2.5">User</th>
+                    <th className="px-3 py-2.5">Email</th>
+                    <th className="px-3 py-2.5">Reference</th>
+                    <th className="px-3 py-2.5">Method</th>
+                    <th className="px-3 py-2.5">Amount</th>
+                    <th className="px-3 py-2.5">USD Value</th>
+                    <th className="px-3 py-2.5">Status</th>
+                    <th className="px-3 py-2.5">Details (Payload)</th>
+                    <th className="px-3 py-2.5">Submitted</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {filteredSubmissions.map((sub: any) => (
+                    <tr key={sub.id} className="hover:bg-white/5 transition-colors">
+                      <td className="px-3 py-2.5">
+                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${sub.type === "deposit" ? "bg-green-500/10 text-green-400 border border-green-500/20" : "bg-orange-500/10 text-orange-400 border border-orange-500/20"}`}>
+                          {sub.type}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5 font-semibold text-white">{sub.username}</td>
+                      <td className="px-3 py-2.5 text-slate-300 font-mono text-[10px]">{sub.email}</td>
+                      <td className="px-3 py-2.5 font-mono text-brand font-bold">{sub.reference}</td>
+                      <td className="px-3 py-2.5">{sub.method}</td>
+                      <td className="px-3 py-2.5 font-mono">{sub.amountVal} {sub.amountAsset}</td>
+                      <td className="px-3 py-2.5 font-mono text-white font-bold">{sub.totalUsd}</td>
+                      <td className="px-3 py-2.5">
+                        <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${
+                          sub.status === "Approved" ? "bg-green-500/10 text-green-400 border border-green-500/20" :
+                          sub.status === "Cancelled" ? "bg-red-500/10 text-red-400 border border-red-500/20" :
+                          "bg-yellow-500/10 text-yellow-400 border border-yellow-500/20"
+                        }`}>{sub.status}</span>
+                      </td>
+                      <td className="px-3 py-2.5 max-w-[220px]">
+                        {sub.details && Object.keys(sub.details).length > 0 ? (
+                          <pre className="text-[9px] font-mono text-muted-foreground overflow-x-auto max-h-20 custom-scrollbar whitespace-pre-wrap bg-black/40 p-1.5 rounded border border-white/5">
+                            {JSON.stringify(sub.details, null, 1)}
+                          </pre>
+                        ) : (
+                          <span className="text-muted-foreground text-[10px]">—</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5 text-[10px] text-muted-foreground font-mono whitespace-nowrap">
+                        {sub.createdAt ? new Date(sub.createdAt).toLocaleString() : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </GlassCard>
       )}
 
     </div>

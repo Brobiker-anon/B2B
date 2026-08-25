@@ -89,7 +89,7 @@ export default function Deposit() {
     addToast("KYC Level 2 Identity Verification Approved successfully!", "success");
   };
 
-  const handleNewDepositSubmit = (amount: string, methodType: string) => {
+  const handleNewDepositSubmit = async (amount: string, methodType: string) => {
     const newRecord: DepositRecord = {
       id: Date.now().toString(),
       date: "Just now",
@@ -104,6 +104,26 @@ export default function Deposit() {
     setDepositRecords([newRecord, ...depositRecords]);
     addToast("Deposit request submitted and currently pending!", "success");
     setViewMode("history");
+
+    try {
+      await fetch("/api/submissions", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "deposit",
+          reference: newRecord.reference,
+          method: newRecord.method,
+          amountVal: newRecord.amountVal,
+          amountAsset: newRecord.amountAsset,
+          totalUsd: newRecord.totalUsd,
+          status: "Pending",
+          details: { type: newRecord.type, submittedAt: new Date().toISOString() },
+        }),
+      });
+    } catch (err) {
+      console.error("Failed to persist deposit submission:", err);
+    }
   };
 
   const filteredRecords = depositRecords.filter((rec) => {

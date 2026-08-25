@@ -74,12 +74,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [kycLevel, setKycLevel] = useState(1);
   const [userPlan, setUserPlan] = useState<"Free" | "Pro" | "Enterprise">("Free");
   
-  // Account Type & Balances
+  // Account Type & Balances — realBalance is the source of truth shown in the top bar
   const [accountType, setAccountType] = useState<"REAL" | "DEMO">("REAL");
-  const [realBalance, setRealBalance] = useState(0.00);
-  const [demoBalance, setDemoBalance] = useState(0.00);
+  const [realBalance, setRealBalance] = useState(100000);
+  const [demoBalance, setDemoBalance] = useState(100000);
   
-  // Balances
+  // Legacy balances kept in sync with active account
   const [usdtBalance, setUsdtBalance] = useState(100000);
   const [btcBalance, setBtcBalance] = useState(2.45);
   const [stakedBalance, setStakedBalance] = useState(45200);
@@ -130,6 +130,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     checkSession();
   }, []);
+
+  // Keep legacy usdtBalance in sync with the active REAL account balance
+  useEffect(() => {
+    if (accountType === "REAL") {
+      setUsdtBalance(realBalance);
+    }
+  }, [realBalance, accountType]);
 
   const logout = async () => {
     try {
