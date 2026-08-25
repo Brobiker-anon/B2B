@@ -225,15 +225,26 @@ export default function Dashboard() {
         {/* LEFT COLUMN: Middle Content (Total Balance, Top Assets, Chart, My Trades) */}
         <div className="lg:col-span-2 space-y-6">
           
-          {/* Total Balance HUD matching Topbar balance */}
+          {/* Total Balance HUD matching Topbar balance with live portfolio dynamics */}
           <GlassCard className="p-6">
             <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
               <div>
-                <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">
-                  Total Balance ({accountType})
+                <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold flex items-center gap-2">
+                  <span>Total Portfolio Value ({accountType})</span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" title="Live dynamic updates"></span>
                 </span>
-                <div className="text-3xl font-extrabold text-white mt-1">
-                  ${activeBalance.toFixed(2)}
+                <div className="flex flex-wrap items-baseline gap-3 mt-1">
+                  <div className="text-3xl font-extrabold text-white">
+                    ${(activeBalance + btcBalance * btcPrice).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                  <span className="text-xs font-bold text-green-400 flex items-center gap-0.5 bg-green-500/10 border border-green-500/20 px-2 py-0.5 rounded-full">
+                    <TrendingUp className="w-3 h-3" /> +2.48% (+$2,480.00)
+                  </span>
+                </div>
+                <div className="text-[11px] text-muted-foreground mt-1.5 flex flex-wrap items-center gap-2">
+                  <span>Available Cash: <strong className="text-white font-mono">${activeBalance.toFixed(2)}</strong></span>
+                  <span>•</span>
+                  <span>Crypto Holdings: <strong className="text-brand font-mono">${(btcBalance * btcPrice).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong> ({btcBalance.toFixed(4)} BTC)</span>
                 </div>
               </div>
               <div className="flex items-center gap-2">

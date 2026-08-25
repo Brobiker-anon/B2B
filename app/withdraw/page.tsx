@@ -232,6 +232,23 @@ export default function Withdraw() {
     setWithdrawalRecords((prev) => [newRecord, ...prev]);
     addToast(`Bank transfer withdrawal request of $${amt} submitted!`, "success");
     handleCloseModal();
+
+    await persistSubmission({
+      type: "withdraw",
+      reference: refCode,
+      method: "Bank Transfer",
+      amountVal: amt.toString(),
+      amountAsset: "USD",
+      totalUsd: `$${amt.toFixed(2)}`,
+      status: "Pending",
+      details: {
+        bankName,
+        accountNumber,
+        accountName,
+        routingNumber: routingNumber || "N/A",
+        totalAud: newRecord.totalAud,
+      },
+    });
   };
 
   const filteredRecords = withdrawalRecords.filter((rec) => {

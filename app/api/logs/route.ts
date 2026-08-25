@@ -5,7 +5,8 @@ import { getServerLogs, addServerLog, clearServerLogs, parseJsonBody } from "@/u
 // GET: Fetch all logs (requires active administrative authentication session)
 export async function GET() {
   try {
-    const sessionCookie = cookies().get("brokerage_session");
+    const cookieStore = await cookies();
+    const sessionCookie = cookieStore.get("brokerage_session");
     
     if (!sessionCookie || !sessionCookie.value) {
       return NextResponse.json(
@@ -92,7 +93,8 @@ export async function POST(request: Request) {
 // DELETE: Clears the logs file database (requires session verification)
 export async function DELETE() {
   try {
-    const sessionCookie = cookies().get("brokerage_session");
+    const cookieStore = await cookies();
+    const sessionCookie = cookieStore.get("brokerage_session");
     
     if (!sessionCookie || !sessionCookie.value) {
       return NextResponse.json(
