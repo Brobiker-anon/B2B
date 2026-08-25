@@ -1,11 +1,36 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { getAdminUsers, saveAdminUsers, addServerLog, parseJsonBody } from "@/utils/serverDb";
+import { getAdminUsers, addServerLog, parseJsonBody } from "@/utils/serverDb";
+import fs from "fs";
+import path from "path";
+
+const USERS_FILE_PATH = path.join(process.cwd(), "data", "users.json");
+
+const getRegularUsers = () => {
+  try {
+    if (!fs.existsSync(USERS_FILE_PATH)) {
+      return [];
+    }
+    const data = fs.readFileSync(USERS_FILE_PATH, "utf-8");
+    return JSON.parse(data);
+  } catch (err) {
+    console.error("Error reading users:", err);
+    return [];
+  }
+};
+
+const saveRegularUsers = (users: any[]) => {
+  try {
+    fs.writeFileSync(USERS_FILE_PATH, JSON.stringify(users, null, 2), "utf-8");
+  } catch (err) {
+    console.error("Error saving users:", err);
+  }
+};
 
 export async function POST(request: Request) {
   try {
     const body = await parseJsonBody(request);
-    const { username, password, email, role } = body;
+    const { username, password, email } = body;
 
     if (!username || !password || !email) {
       return NextResponse.json(
@@ -36,11 +61,14 @@ export async function POST(request: Request) {
       );
     }
 
-    const admins = getAdminUsers(); // used as general users database
+    const admins = getAdminUsers();
+    const users = getRegularUsers();
 
-    // Check for duplicate username
+    // Check for duplicate username in both admin and user databases
     const existingUsername = admins.find(
       (a: any) => a.username.toLowerCase() === username.trim().toLowerCase()
+    ) || users.find(
+      (u: any) => u.username.toLowerCase() === username.trim().toLowerCase()
     );
     if (existingUsername) {
       return NextResponse.json(
@@ -49,9 +77,11 @@ export async function POST(request: Request) {
       );
     }
 
-    // Check for duplicate email
+    // Check for duplicate email in both databases
     const existingEmail = admins.find(
       (a: any) => a.email.toLowerCase() === email.trim().toLowerCase()
+    ) || users.find(
+      (u: any) => u.email.toLowerCase() === email.trim().toLowerCase()
     );
     if (existingEmail) {
       return NextResponse.json(
@@ -67,26 +97,24 @@ export async function POST(request: Request) {
         ? (nameParts[0][0] + nameParts[1][0]).toUpperCase()
         : username.trim().substring(0, 2).toUpperCase();
 
-    const assignedRole = "Administrator";
-
-    const newAdmin = {
+    const newUser = {
       username: username.trim().toLowerCase(),
       password: password,
-      role: assignedRole,
+      role: "User",
       email: email.trim().toLowerCase(),
       avatar,
       createdAt: new Date().toISOString()
     };
 
-    admins.push(newAdmin);
-    saveAdminUsers(admins);
+    users.push(newUser);
+    saveRegularUsers(users);
 
     // Auto-login the newly registered user
     const sessionData = JSON.stringify({
-      username: newAdmin.username,
-      role: newAdmin.role,
-      email: newAdmin.email,
-      avatar: newAdmin.avatar
+      username: newUser.username,
+      role: newUser.role,
+      email: newUser.email,
+      avatar: newUser.avatar
     });
 
     cookies().set("brokerage_session", sessionData, {
@@ -102,28 +130,28 @@ export async function POST(request: Request) {
       request.headers.get("x-forwarded-for")?.split(",")[0] || "127.0.0.1";
 
     addServerLog({
-      userId: `usr-${newAdmin.username}`,
-      userName: newAdmin.username,
-      userEmail: newAdmin.email,
-      userRole: newAdmin.role,
-      avatar: newAdmin.avatar,
-      action: `New account created and authenticated: ${newAdmin.username} (${newAdmin.role})`,
+      userId: `usr-${newUser.username}`,
+      userName: newUser.username,
+      userEmail: newUser.email,
+      userRole: newUser.role,
+      avatar: newUser.avatar,
+      action: `New user account created: ${newUser.username}`,
       category: "security",
       status: "success",
-      severity: "warning",
+      severity: "info",
       ipAddress,
       location: "Unknown",
       browser: userAgent,
-      details: { role: newAdmin.role, email: newAdmin.email }
+      details: { role: newUser.role, email: newUser.email }
     });
 
     return NextResponse.json({
       success: true,
       user: {
-        username: newAdmin.username,
-        role: newAdmin.role,
-        email: newAdmin.email,
-        avatar: newAdmin.avatar
+        username: newUser.username,
+        role: newUser.role,
+        email: newUser.email,
+        avatar: newUser.avatar
       }
     });
   } catch (err) {

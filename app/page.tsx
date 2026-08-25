@@ -34,14 +34,6 @@ const TradingViewChart = dynamic(
   }
 );
 
-const CandlestickChart = dynamic(
-  () => import('@/components/CandlestickChart'),
-  { 
-    ssr: false,
-    loading: () => <div className="h-[320px] w-full bg-white/5 animate-pulse rounded-lg flex items-center justify-center text-muted-foreground text-sm">Loading AI candlestick terminal...</div>
-  }
-);
-
 const getTradingViewSymbol = (asset: string) => {
   switch (asset) {
     case "BTC":
@@ -124,7 +116,6 @@ export default function Dashboard() {
   const [leverage, setLeverage] = useState(5);
   const [useTpSl, setUseTpSl] = useState(false);
   const [duration, setDuration] = useState("2 minutes");
-  const [chartEngine, setChartEngine] = useState<"candlestick" | "tradingview">("candlestick");
 
   // Accordion state
   const [openTradesExpanded, setOpenTradesExpanded] = useState(true);
@@ -292,41 +283,24 @@ export default function Dashboard() {
             </div>
           </GlassCard>
 
-          {/* Chart Header Bar with Engine Selector */}
+          {/* Chart Header Bar */}
           <div className="flex flex-wrap justify-between items-center gap-2 bg-black/40 p-2.5 rounded-xl border border-white/5">
             <div className="flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-[#089981]" />
               <span className="text-xs font-bold text-white uppercase tracking-wider">Market Overview Chart</span>
             </div>
-            <div className="flex gap-1 bg-white/5 p-1 rounded-lg border border-white/10 text-xs">
-              <button
-                onClick={() => setChartEngine("candlestick")}
-                className={`px-3 py-1 rounded font-semibold transition-all cursor-pointer ${
-                  chartEngine === "candlestick"
-                    ? "bg-[#089981] text-white shadow-sm"
-                    : "text-slate-400 hover:text-white"
-                }`}
-              >
-                AI Candlestick Terminal
-              </button>
-              <button
-                onClick={() => setChartEngine("tradingview")}
-                className={`px-3 py-1 rounded font-semibold transition-all cursor-pointer ${
-                  chartEngine === "tradingview"
-                    ? "bg-[#3b82f6] text-white shadow-sm"
-                    : "text-slate-400 hover:text-white"
-                }`}
-              >
-                TradingView Terminal
-              </button>
-            </div>
           </div>
 
-          {chartEngine === "candlestick" ? (
-            <CandlestickChart chartData={chartData} selectedAsset={selectedAsset} height={260} />
-          ) : (
-            <TradingViewChart symbol={getTradingViewSymbol(selectedAsset)} theme="dark" height={260} />
-          )}
+          {/* TradingView Chart Only */}
+          <GlassCard className="p-0 overflow-hidden">
+            {mounted ? (
+              <TradingViewChart symbol={getTradingViewSymbol(selectedAsset)} theme="dark" height={400} />
+            ) : (
+              <div className="h-[400px] w-full bg-white/5 animate-pulse rounded-lg flex items-center justify-center text-muted-foreground text-sm">
+                Loading chart...
+              </div>
+            )}
+          </GlassCard>
 
           {/* My Trades Collapsible Sections */}
           <GlassCard className="p-6">
@@ -645,36 +619,36 @@ export default function Dashboard() {
       </div>
 
       {/* Bottom quick stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4">
-        <GlassCard className="flex items-center gap-4 p-5">
-          <div className="w-12 h-12 rounded-xl bg-yellow-500/10 text-yellow-500 flex items-center justify-center flex-shrink-0">
-            <Award className="w-6 h-6" />
+      <div className="grid w-100 grid-cols-1 jus gap-4">
+        <GlassCard className="flex items-center gap-3 p-4">
+          <div className="w-10 h-10 rounded-xl bg-yellow-500/10 text-yellow-500 flex items-center justify-center flex-shrink-0">
+            <Award className="w-5 h-5" />
           </div>
           <div>
-            <h4 className="font-bold text-white text-sm">Shane Coleman</h4>
-            <p className="text-xs text-green-400 font-semibold cursor-pointer hover:underline" onClick={() => window.location.href = "/settings"}>
+            <h4 className="font-bold text-white text-xs">Shane Coleman</h4>
+            <p className="text-[10px] text-green-400 font-semibold cursor-pointer hover:underline" onClick={() => window.location.href = "/settings"}>
               Verify your account
             </p>
           </div>
         </GlassCard>
 
-        <GlassCard className="flex items-center gap-4 p-5">
-          <div className="w-12 h-12 rounded-xl bg-brand/10 text-brand flex items-center justify-center flex-shrink-0">
-            <Activity className="w-6 h-6" />
+        <GlassCard className="flex items-center gap-3 p-4">
+          <div className="w-10 h-10 rounded-xl bg-brand/10 text-brand flex items-center justify-center flex-shrink-0">
+            <Activity className="w-5 h-5" />
           </div>
           <div>
-            <h4 className="font-bold text-white text-sm">Signal Strength</h4>
-            <p className="text-xs text-muted-foreground">AI matching optimization: 98% positive accuracy.</p>
+            <h4 className="font-bold text-white text-xs">Signal Strength</h4>
+            <p className="text-[10px] text-muted-foreground">AI matching optimization: 98% positive accuracy.</p>
           </div>
         </GlassCard>
 
-        <GlassCard className="flex items-center gap-4 p-5">
-          <div className="w-12 h-12 rounded-xl bg-red-500/10 text-red-500 flex items-center justify-center flex-shrink-0">
-            <ShieldAlert className="w-6 h-6" />
+        <GlassCard className="flex items-center gap-3 p-4">
+          <div className="w-10 h-10 rounded-xl bg-red-500/10 text-red-500 flex items-center justify-center flex-shrink-0">
+            <ShieldAlert className="w-5 h-5" />
           </div>
           <div>
-            <h4 className="font-bold text-white text-sm">Cold Storage Active</h4>
-            <p className="text-xs text-muted-foreground">Hardened multisig wallet security safeguards enabled.</p>
+            <h4 className="font-bold text-white text-xs">Cold Storage Active</h4>
+            <p className="text-[10px] text-muted-foreground">Hardened multisig wallet security safeguards enabled.</p>
           </div>
         </GlassCard>
       </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import GlassCard from "@/components/ui/GlassCard";
 import { 
@@ -413,14 +414,15 @@ export default function Deposit() {
         )}
       </AnimatePresence>
 
-      {/* Floating Chat Bubble Widget matching screenshot */}
+      {/* Floating Chat Bubble Widget */}
       <div className="fixed bottom-6 right-6 z-50">
-        <button
-          onClick={() => addToast("Connecting to live support chat...", "info")}
+        <Link
+          href="/chat"
           className="w-12 h-12 rounded-full bg-[#0066cc] text-white flex items-center justify-center shadow-lg shadow-blue-500/20 hover:scale-105 active:scale-95 transition-all cursor-pointer border border-blue-400/25"
+          title="Open Live Chat"
         >
           <MessageSquare className="w-5 h-5 fill-white text-[#0066cc]" />
-        </button>
+        </Link>
       </div>
     </motion.div>
   );

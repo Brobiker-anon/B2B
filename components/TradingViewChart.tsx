@@ -33,7 +33,7 @@ const TradingViewChart: React.FC<TradingViewChartProps> = ({
     script.async = true;
     
     script.innerHTML = JSON.stringify({
-      autosize: true,
+      autosize: false,
       symbol: symbol,
       interval: "D",
       timezone: "Etc/UTC",
@@ -42,7 +42,9 @@ const TradingViewChart: React.FC<TradingViewChartProps> = ({
       locale: "en",
       allow_symbol_change: true,
       calendar: false,
-      support_host: "https://www.tradingview.com"
+      support_host: "https://www.tradingview.com",
+      height: height,
+      width: "100%"
     });
 
     containerRef.current.appendChild(script);

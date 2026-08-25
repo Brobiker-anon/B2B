@@ -37,5 +37,111 @@
       }
     ],
     "lastUpdated": "2026-08-21T18:44:02.629Z"
+  },
+  {
+    "id": "chat_aaaaaa",
+    "name": "aaaaaa",
+    "username": "aaaaaa",
+    "avatar": "AA",
+    "color": "from-green-500 to-emerald-500",
+    "status": "Online",
+    "messages": [
+      {
+        "id": "msg-1787507791446",
+        "sender": "Admin",
+        "text": "Hello aaaaaa, how can I help you today?",
+        "time": "18:56",
+        "senderType": "admin"
+      },
+      {
+        "id": "msg-1787507792370",
+        "sender": "aaaaaa",
+        "text": "hi",
+        "time": "18:56",
+        "senderType": "user"
+      },
+      {
+        "id": "msg-1787507864187",
+        "sender": "aaaaaa",
+        "text": "Hey",
+        "time": "18:57",
+        "senderType": "user"
+      },
+      {
+        "id": "msg-1787614532030",
+        "sender": "aaaaaa",
+        "text": "hi",
+        "time": "00:35",
+        "senderType": "user"
+      },
+      {
+        "id": "msg-1787614676832",
+        "sender": "aaaaaa",
+        "text": "Hey boss",
+        "time": "00:37",
+        "senderType": "admin"
+      },
+      {
+        "id": "msg-1787614760364",
+        "sender": "aaaaaa",
+        "text": "What's your complain?",
+        "time": "00:39",
+        "senderType": "admin"
+      }
+    ],
+    "lastUpdated": "2026-08-24T23:39:20.366Z"
+  },
+  {
+    "id": "chat_qwerty",
+    "name": "qwerty",
+    "username": "qwerty",
+    "avatar": "QW",
+    "color": "from-pink-500 to-rose-500",
+    "status": "Online",
+    "messages": [
+      {
+        "id": "msg-1787616055531",
+        "sender": "Admin",
+        "text": "Hello qwerty, how can I help you today?",
+        "time": "01:00",
+        "senderType": "admin"
+      },
+      {
+        "id": "msg-1787616061831",
+        "sender": "qwerty",
+        "text": "hi",
+        "time": "01:01",
+        "senderType": "user"
+      },
+      {
+        "id": "msg-1787616093869",
+        "sender": "qwerty",
+        "text": "hello",
+        "time": "01:01",
+        "senderType": "admin"
+      },
+      {
+        "id": "msg-1787616283892",
+        "sender": "qwerty",
+        "text": "What is your issue?",
+        "time": "01:04",
+        "senderType": "admin"
+      },
+      {
+        "id": "msg-1787616344951",
+        "sender": "qwerty",
+        "text": "My deposit isn't working",
+        "time": "01:05",
+        "senderType": "user"
+      },
+      {
+        "id": "msg-1787617342433",
+        "sender": "qwerty",
+        "text": "hi",
+        "time": "01:22",
+        "senderType": "user"
+      }
+    ],
+    "lastUpdated": "2026-08-25T00:22:22.630Z"
   }
 ]

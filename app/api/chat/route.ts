@@ -82,18 +82,10 @@ export async function GET(request: Request) {
       username: loggedInUsername,
     } = await getSession();
 
-    const chats = getChats();
-
-    if (isAdmin) {
-      return NextResponse.json({
-        success: true,
-        isAdmin: true,
-        chats,
-      });
-    }
-
     const targetUsername =
-      loggedInUsername || activeUsername || "Guest";
+      activeUsername || loggedInUsername || "Guest";
+
+    const chats = getChats();
 
     let userChat = chats.find(
       (chat) =>
@@ -109,6 +101,15 @@ export async function GET(request: Request) {
     }
 
     saveChats(chats);
+
+    if (isAdmin) {
+      return NextResponse.json({
+        success: true,
+        isAdmin: true,
+        chats,
+        chat: userChat,
+      });
+    }
 
     return NextResponse.json({
       success: true,

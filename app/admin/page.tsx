@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   ShieldCheck, Play, Pause, Trash2, Download, Search, 
@@ -38,6 +38,7 @@ export default function AdminLogsPortal() {
   const [supportChats, setSupportChats] = useState<any[]>([]);
   const [activeAdminChatId, setActiveAdminChatId] = useState<string | null>(null);
   const [adminReplyInput, setAdminReplyInput] = useState("");
+  const adminChatEndRef = useRef<HTMLDivElement>(null);
   
   // Auth State
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -119,6 +120,12 @@ export default function AdminLogsPortal() {
     const interval = setInterval(fetchSupportChats, 1500); // 1.5s live polling
     return () => clearInterval(interval);
   }, [mounted, isAuthenticated, adminTab]);
+
+  useEffect(() => {
+    if (activeAdminChatId) {
+      adminChatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [activeAdminChatId, supportChats]);
 
   const handleAdminSendMessage = async () => {
     if (!activeAdminChatId || !adminReplyInput.trim()) return;
@@ -1228,6 +1235,7 @@ export default function AdminLogsPortal() {
                           </div>
                         );
                       })}
+                      <div ref={adminChatEndRef} />
                     </div>
 
                     {/* Input */}

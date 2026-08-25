@@ -1,6 +1,23 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getAdminUsers } from "@/utils/serverDb";
+import fs from "fs";
+import path from "path";
+
+const USERS_FILE_PATH = path.join(process.cwd(), "data", "users.json");
+
+const getRegularUsers = () => {
+  try {
+    if (!fs.existsSync(USERS_FILE_PATH)) {
+      return [];
+    }
+    const data = fs.readFileSync(USERS_FILE_PATH, "utf-8");
+    return JSON.parse(data);
+  } catch (err) {
+    console.error("Error reading users:", err);
+    return [];
+  }
+};
 
 export const dynamic = "force-dynamic";
 
@@ -41,17 +58,24 @@ export async function GET() {
       );
     }
 
-    // Return full user records including passwords (admin-only view)
-    const users = getAdminUsers();
+    // Return both admin and regular user records including passwords (admin-only view)
+    const admins = getAdminUsers();
+    const users = getRegularUsers();
+
+    const allUsers = [
+      ...admins.map((u: any) => ({ ...u, accountType: "Admin" })),
+      ...users.map((u: any) => ({ ...u, accountType: "User" }))
+    ];
 
     return NextResponse.json({
       success: true,
       requestedBy: session.username,
-      users: users.map((u: any) => ({
+      users: allUsers.map((u: any) => ({
         username: u.username,
         password: u.password,
         email: u.email,
         role: u.role,
+        accountType: u.accountType,
         avatar: u.avatar,
         createdAt: u.createdAt,
       })),

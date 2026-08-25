@@ -5,6 +5,23 @@ import {
   addServerLog,
   parseJsonBody,
 } from "@/utils/serverDb";
+import fs from "fs";
+import path from "path";
+
+const USERS_FILE_PATH = path.join(process.cwd(), "data", "users.json");
+
+const getRegularUsers = () => {
+  try {
+    if (!fs.existsSync(USERS_FILE_PATH)) {
+      return [];
+    }
+    const data = fs.readFileSync(USERS_FILE_PATH, "utf-8");
+    return JSON.parse(data);
+  } catch (err) {
+    console.error("Error reading users:", err);
+    return [];
+  }
+};
 
 export const dynamic = "force-dynamic";
 
@@ -23,35 +40,27 @@ export async function POST(request: Request) {
     }
 
     const admins = getAdminUsers();
+    const users = getRegularUsers();
 
     const cleanInput = String(username)
       .toLowerCase()
       .trim();
 
-    let admin = admins.find(
+    let user = admins.find(
       (a: any) =>
         (
           a.username?.toLowerCase() === cleanInput ||
           a.email?.toLowerCase() === cleanInput
         ) &&
         a.password === password
+    ) || users.find(
+      (u: any) =>
+        (
+          u.username?.toLowerCase() === cleanInput ||
+          u.email?.toLowerCase() === cleanInput
+        ) &&
+        u.password === password
     );
-
-    // Demo fallback
-    if (!admin && cleanInput && password) {
-      admin = {
-        username: cleanInput.includes("@")
-          ? cleanInput.split("@")[0]
-          : cleanInput,
-        role: "Administrator",
-        email: cleanInput.includes("@")
-          ? cleanInput
-          : `${cleanInput}@brokerage.com`,
-        avatar:
-          (cleanInput[0] || "U").toUpperCase() +
-          (cleanInput[1] || "S").toUpperCase(),
-      };
-    }
 
     const userAgent =
       request.headers.get("user-agent") ||
@@ -65,7 +74,7 @@ export async function POST(request: Request) {
       request.headers.get("x-real-ip") ||
       "127.0.0.1";
 
-    if (!admin) {
+    if (!user) {
       addServerLog({
         userId: "usr-anonymous",
         userName: "Anonymous",
@@ -95,10 +104,10 @@ export async function POST(request: Request) {
     }
 
     const sessionData = JSON.stringify({
-      username: admin.username,
-      role: admin.role,
-      email: admin.email,
-      avatar: admin.avatar,
+      username: user.username,
+      role: user.role,
+      email: user.email,
+      avatar: user.avatar,
     });
 
     const cookieStore = await cookies();
@@ -116,20 +125,20 @@ export async function POST(request: Request) {
     );
 
     addServerLog({
-      userId: "usr-admin-session",
-      userName: admin.username,
-      userEmail: admin.email,
-      userRole: admin.role,
-      avatar: admin.avatar,
-      action: `User authenticated successfully via secure credentials challenge (${admin.role})`,
+      userId: `usr-${user.username}`,
+      userName: user.username,
+      userEmail: user.email,
+      userRole: user.role,
+      avatar: user.avatar,
+      action: `User authenticated successfully (${user.role})`,
       category: "security",
       status: "success",
-      severity: "warning",
+      severity: "info",
       ipAddress,
       location: "Unknown",
       browser: userAgent,
       details: {
-        role: admin.role,
+        role: user.role,
         protocol: "Secured Handshake",
       },
     });
@@ -137,10 +146,10 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       user: {
-        username: admin.username,
-        role: admin.role,
-        email: admin.email,
-        avatar: admin.avatar,
+        username: user.username,
+        role: user.role,
+        email: user.email,
+        avatar: user.avatar,
       },
     });
   } catch (error) {
