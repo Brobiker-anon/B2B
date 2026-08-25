@@ -76,14 +76,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   
   // Account Type & Balances — realBalance is the source of truth shown in the top bar
   const [accountType, setAccountType] = useState<"REAL" | "DEMO">("REAL");
-  const [realBalance, setRealBalance] = useState(100000);
-  const [demoBalance, setDemoBalance] = useState(100000);
+  const [realBalance, setRealBalance] = useState(0);
+  const [demoBalance, setDemoBalance] = useState(0);
   
-  // Legacy balances kept in sync with active account
-  const [usdtBalance, setUsdtBalance] = useState(100000);
-  const [btcBalance, setBtcBalance] = useState(2.45);
-  const [stakedBalance, setStakedBalance] = useState(45200);
-  const [miningEarnings, setMiningEarnings] = useState(12.4582);
+  // Balances kept in sync with active account
+  const [usdtBalance, setUsdtBalance] = useState(0);
+  const [btcBalance, setBtcBalance] = useState(0);
+  const [stakedBalance, setStakedBalance] = useState(0);
+  const [miningEarnings, setMiningEarnings] = useState(0);
 
   // Toasts
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -101,6 +101,81 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const removeToast = (id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   };
+
+  // Sync user balances when active user changes or logs in
+  useEffect(() => {
+    if (!user?.username) {
+      setRealBalance(0);
+      setDemoBalance(0);
+      setUsdtBalance(0);
+      setBtcBalance(0);
+      setStakedBalance(0);
+      setMiningEarnings(0);
+      return;
+    }
+
+    const storageKey = `brokerage_balances_${user.username.toLowerCase()}`;
+    const saved = typeof window !== "undefined" ? localStorage.getItem(storageKey) : null;
+
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        setRealBalance(parsed.realBalance ?? 0);
+        setDemoBalance(parsed.demoBalance ?? 0);
+        setUsdtBalance(parsed.usdtBalance ?? (parsed.realBalance ?? 0));
+        setBtcBalance(parsed.btcBalance ?? 0);
+        setStakedBalance(parsed.stakedBalance ?? 0);
+        setMiningEarnings(parsed.miningEarnings ?? 0);
+        return;
+      } catch {}
+    }
+
+    // Only account "jjj" starts with $100,000 funded; ALL other accounts start from $0 on REAL and DEMO
+    const isMasterFundedAccount = user.username.toLowerCase() === "jjj";
+    const initialReal = isMasterFundedAccount ? 100000 : 0;
+    const initialDemo = isMasterFundedAccount ? 100000 : 0;
+    const initialBtc = isMasterFundedAccount ? 2.45 : 0;
+    const initialStaked = isMasterFundedAccount ? 45200 : 0;
+    const initialMining = isMasterFundedAccount ? 12.4582 : 0;
+
+    setRealBalance(initialReal);
+    setDemoBalance(initialDemo);
+    setUsdtBalance(initialReal);
+    setBtcBalance(initialBtc);
+    setStakedBalance(initialStaked);
+    setMiningEarnings(initialMining);
+
+    if (typeof window !== "undefined") {
+      localStorage.setItem(
+        storageKey,
+        JSON.stringify({
+          realBalance: initialReal,
+          demoBalance: initialDemo,
+          usdtBalance: initialReal,
+          btcBalance: initialBtc,
+          stakedBalance: initialStaked,
+          miningEarnings: initialMining,
+        })
+      );
+    }
+  }, [user?.username]);
+
+  // Persist updated balances to localStorage for active user
+  useEffect(() => {
+    if (!user?.username || typeof window === "undefined") return;
+    const storageKey = `brokerage_balances_${user.username.toLowerCase()}`;
+    localStorage.setItem(
+      storageKey,
+      JSON.stringify({
+        realBalance,
+        demoBalance,
+        usdtBalance,
+        btcBalance,
+        stakedBalance,
+        miningEarnings,
+      })
+    );
+  }, [realBalance, demoBalance, usdtBalance, btcBalance, stakedBalance, miningEarnings, user?.username]);
 
   const checkSession = async () => {
     try {

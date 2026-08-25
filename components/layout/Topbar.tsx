@@ -100,7 +100,7 @@ export default function Topbar() {
               }}
               className="flex items-center gap-2 px-3 py-1.5 border border-[#1e2028] bg-[#0d0e12] hover:bg-[#16181d] rounded-lg text-sm font-bold text-white transition-colors cursor-pointer select-none"
             >
-              <span>${(accountType === "REAL" ? realBalance : demoBalance).toFixed(2)}</span>
+              <span>${(accountType === "REAL" ? realBalance : demoBalance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               <span className="text-[#00a3ff] font-extrabold text-xs tracking-wide">{accountType}</span>
               <ChevronDown className="w-3.5 h-3.5 text-white ml-0.5" />
             </button>
@@ -129,7 +129,7 @@ export default function Topbar() {
                     >
                       <div>
                         <div className="text-xs font-semibold text-[#00a3ff]">Real account</div>
-                        <div className="text-sm font-bold text-white">${realBalance.toFixed(2)}</div>
+                        <div className="text-sm font-bold text-white">${realBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                       </div>
                       <div className={`p-2.5 rounded-lg flex items-center justify-center ${accountType === "REAL" ? "bg-[#00a3ff]" : "bg-[#22252c]"}`}>
                         <CreditCard className="w-4 h-4 text-white" />
@@ -149,7 +149,7 @@ export default function Topbar() {
                     >
                       <div>
                         <div className="text-xs font-semibold text-[#00a3ff]">Demo account</div>
-                        <div className="text-sm font-bold text-white">${demoBalance.toFixed(2)}</div>
+                        <div className="text-sm font-bold text-white">${demoBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                       </div>
                       <div className={`p-2.5 rounded-lg flex items-center justify-center ${accountType === "DEMO" ? "bg-[#00a3ff]" : "bg-[#22252c]"}`}>
                         <Clock className="w-4 h-4 text-white" />

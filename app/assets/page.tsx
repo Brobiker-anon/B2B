@@ -30,19 +30,20 @@ interface AssetRow {
 }
 
 export default function Assets() {
-  const { usdtBalance, btcBalance, addToast } = useApp();
+  const { user, usdtBalance, btcBalance, addToast } = useApp();
   const router = useRouter();
   
   const [showBalance, setShowBalance] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState("All");
 
-  const btcPriceAud = 90395.73; // approx value matching A$11.643K for 0.1288 BTC
+  const isMasterUser = user?.username?.toLowerCase() === "jjj";
+  const btcPriceAud = 90395.73;
   const btcValAud = btcBalance * btcPriceAud;
   
   // Calculate total balance from all assets with balances
   const initialAssetsAudValue = ALL_ASSETS.reduce((sum, asset) => {
-    let bal = asset.rawBalance;
+    let bal = isMasterUser ? asset.rawBalance : 0;
     if (asset.symbol === "BTC") bal = btcBalance;
     if (asset.symbol === "USDT") bal = usdtBalance;
     return sum + (bal * asset.rawPrice * 1.50);
@@ -61,7 +62,7 @@ export default function Assets() {
 
   // Map ALL_ASSETS to row formats
   const mappedCryptos: AssetRow[] = ALL_ASSETS.map((asset) => {
-    let bal = asset.rawBalance;
+    let bal = isMasterUser ? asset.rawBalance : 0;
     if (asset.symbol === "BTC") bal = btcBalance;
     if (asset.symbol === "USDT") bal = usdtBalance;
     
