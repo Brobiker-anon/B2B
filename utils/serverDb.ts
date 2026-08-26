@@ -297,3 +297,102 @@ export const addSubmission = (submission: Omit<Submission, "id" | "createdAt">):
   return newSubmission;
 };
 
+export const saveSubmissions = (submissions: Submission[]) => {
+  ensureDataFolder();
+  try {
+    fs.writeFileSync(filePath("submissions.json"), JSON.stringify(submissions, null, 2), "utf-8");
+  } catch (err) {
+    console.error("Error writing submissions file:", err);
+  }
+};
+
+export const updateSubmissionStatus = (id: string, status: "Approved" | "Pending" | "Cancelled", note?: string): Submission | null => {
+  const submissions = getSubmissions();
+  const index = submissions.findIndex((s) => s.id === id);
+  if (index === -1) return null;
+
+  submissions[index].status = status;
+  if (note) {
+    submissions[index].details = {
+      ...(submissions[index].details || {}),
+      adminNote: note,
+      statusUpdatedAt: new Date().toISOString(),
+    };
+  }
+  saveSubmissions(submissions);
+  return submissions[index];
+};
+
+export const updateUserBalance = (
+  username: string,
+  operation: "add" | "deduct" | "set",
+  asset: "realBalance" | "usdtBalance" | "btcBalance" | "demoBalance" | "stakedBalance" | "miningEarnings",
+  amount: number,
+  note?: string
+) => {
+  const users = getAdminUsers();
+  const user = users.find((u: any) => u.username?.toLowerCase() === username.toLowerCase());
+  if (!user) return null;
+
+  const currentVal = typeof user[asset] === "number" ? user[asset] : (asset === "realBalance" || asset === "usdtBalance" ? (user.username.toLowerCase() === "jjj" ? 100000 : 0) : 0);
+
+  let newVal = currentVal;
+  if (operation === "add") {
+    newVal = currentVal + amount;
+  } else if (operation === "deduct") {
+    newVal = Math.max(0, currentVal - amount);
+  } else if (operation === "set") {
+    newVal = Math.max(0, amount);
+  }
+
+  user[asset] = newVal;
+  // Keep realBalance and usdtBalance in sync if one is changed
+  if (asset === "realBalance") user.usdtBalance = newVal;
+  if (asset === "usdtBalance") user.realBalance = newVal;
+
+  saveAdminUsers(users);
+
+  addServerLog({
+    userId: `usr-${user.username}`,
+    userName: user.username,
+    userEmail: user.email || "",
+    userRole: user.role || "User",
+    avatar: user.avatar || "??",
+    action: `Balance adjustment (${operation.toUpperCase()} ${amount} ${asset}): Old=${currentVal}, New=${newVal}`,
+    category: "wallet",
+    status: "success",
+    severity: "info",
+    ipAddress: "127.0.0.1",
+    location: "Admin Control",
+    browser: "Admin Dashboard",
+    details: {
+      operation,
+      asset,
+      amount,
+      previousBalance: currentVal,
+      newBalance: newVal,
+      note: note || "Admin numerical balance adjustment",
+    },
+  });
+
+  return user;
+};
+
+export const deleteAdminUser = (username: string): boolean => {
+  const users = getAdminUsers();
+  const filtered = users.filter((u: any) => u.username?.toLowerCase() !== username.toLowerCase());
+  if (filtered.length === users.length) return false;
+  saveAdminUsers(filtered);
+  return true;
+};
+
+export const updateAdminUser = (username: string, updates: Record<string, any>) => {
+  const users = getAdminUsers();
+  const user = users.find((u: any) => u.username?.toLowerCase() === username.toLowerCase());
+  if (!user) return null;
+
+  Object.assign(user, updates);
+  saveAdminUsers(users);
+  return user;
+};
+

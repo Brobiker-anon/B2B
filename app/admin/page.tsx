@@ -3,9 +3,13 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
-  ShieldCheck, Play, Pause, Trash2, Download, Search, 
-  Terminal, Globe, MapPin, X, HelpCircle, FileText, Lock, ShieldAlert,
-  Fingerprint, RefreshCw, Eye, EyeOff, Users, KeyRound, Copy, Check
+  Users, DollarSign, PlusCircle, MinusCircle, MessageSquare, 
+  Search, Copy, Check, Eye, EyeOff, Lock, ShieldCheck, 
+  Trash2, Download, RefreshCw, ArrowUpRight, ArrowDownLeft, 
+  Landmark, Wallet, KeyRound, Globe, Phone, Mail, 
+  CheckCircle2, XCircle, Clock, AlertCircle, Terminal, 
+  LogOut, ShieldAlert, Fingerprint, ChevronRight, UserPlus,
+  Send, UserCheck, Settings, ExternalLink, HelpCircle
 } from "lucide-react";
 import GlassCard from "@/components/ui/GlassCard";
 
@@ -18,7 +22,7 @@ export interface ActivityLog {
   userRole: string;
   avatar: string;
   action: string;
-  category: "trade" | "wallet" | "security" | "system" | "staking" | "mining" | "real-estate" | "referrals" | "chat";
+  category: string;
   status: "success" | "warning" | "failed";
   severity: "info" | "warning" | "error" | "critical";
   ipAddress: string;
@@ -27,1690 +31,1936 @@ export interface ActivityLog {
   details?: Record<string, any>;
 }
 
-export default function AdminLogsPortal() {
+export interface UserAccount {
+  username: string;
+  password: string;
+  email: string;
+  role: string;
+  avatar: string;
+  firstName?: string;
+  lastName?: string;
+  country?: string;
+  phone?: string;
+  currency?: string;
+  referralCode?: string;
+  createdAt: string;
+  realBalance: number;
+  usdtBalance: number;
+  btcBalance: number;
+  demoBalance: number;
+  stakedBalance: number;
+  miningEarnings: number;
+  submissionsCount?: number;
+  hasChat?: boolean;
+  submissions?: any[];
+}
+
+export interface SubmissionItem {
+  id: string;
+  type: "deposit" | "withdraw" | "withdrawal";
+  username: string;
+  email: string;
+  reference: string;
+  method: string;
+  amountVal: string;
+  amountAsset: string;
+  totalUsd: string;
+  status: "Pending" | "Approved" | "Cancelled";
+  details?: Record<string, any>;
+  createdAt: string;
+}
+
+export default function AdminPortal() {
   const [mounted, setMounted] = useState(false);
-  const [logs, setLogs] = useState<ActivityLog[]>([]);
-  const [isLive, setIsLive] = useState(true);
-  const [selectedLog, setSelectedLog] = useState<ActivityLog | null>(null);
-  
-  // Support Chat States
-  const [adminTab, setAdminTab] = useState<"logs" | "support" | "accounts" | "submissions">("logs");
-  const [supportChats, setSupportChats] = useState<any[]>([]);
-  const [activeAdminChatId, setActiveAdminChatId] = useState<string | null>(null);
-  const [adminReplyInput, setAdminReplyInput] = useState("");
-  const adminChatEndRef = useRef<HTMLDivElement>(null);
-  
-  // Auth State
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [activeUser, setActiveUser] = useState<any>(null);
+  const [activeAdmin, setActiveAdmin] = useState<any>(null);
+  
+  // Navigation Tabs
+  const [activeTab, setActiveTab] = useState<"dashboard" | "accounts" | "balance" | "submissions" | "chats" | "logs">("dashboard");
+
+  // Data States
+  const [usersList, setUsersList] = useState<UserAccount[]>([]);
+  const [submissionsList, setSubmissionsList] = useState<SubmissionItem[]>([]);
+  const [supportChats, setSupportChats] = useState<any[]>([]);
+  const [logs, setLogs] = useState<ActivityLog[]>([]);
+  const [loadingData, setLoadingData] = useState(false);
+  const [isLiveStream, setIsLiveStream] = useState(true);
+
+  // Auth Form State
   const [authMode, setAuthMode] = useState<"login" | "register">("login");
   const [usernameInput, setUsernameInput] = useState("");
   const [emailInput, setEmailInput] = useState("");
   const [passwordInput, setPasswordInput] = useState("");
   const [confirmPasswordInput, setConfirmPasswordInput] = useState("");
   const [loginError, setLoginError] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [passwordShaken, setPasswordShaken] = useState(false);
+  const [isSubmittingAuth, setIsSubmittingAuth] = useState(false);
 
-  // Credentials panel state
-  const [showCredentials, setShowCredentials] = useState(false);
-  const [credentialsList, setCredentialsList] = useState<any[]>([]);
-  const [submissionsList, setSubmissionsList] = useState<any[]>([]);
-  const [loadingCredentials, setLoadingCredentials] = useState(false);
+  // Search & Filter States
+  const [accountSearch, setAccountSearch] = useState("");
+  const [submissionSearch, setSubmissionSearch] = useState("");
+  const [submissionFilter, setSubmissionFilter] = useState<"all" | "deposit" | "withdraw" | "Pending" | "Approved" | "Cancelled">("all");
+  const [logSearch, setLogSearch] = useState("");
+  const [logCategoryFilter, setLogCategoryFilter] = useState("all");
+
+  // Account Password Visibility & Clipboard
   const [revealedPasswords, setRevealedPasswords] = useState<Set<string>>(new Set());
-  const [revealAllPasswords, setRevealAllPasswords] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
-  // Account search & filter
-  const [accountSearchText, setAccountSearchText] = useState("");
+  // Selected User Modal / Detail
+  const [inspectUser, setInspectUser] = useState<UserAccount | null>(null);
+  const [inspectSubmission, setInspectSubmission] = useState<SubmissionItem | null>(null);
 
-  // Submissions search & filter
-  const [submissionSearchText, setSubmissionSearchText] = useState("");
-  const [submissionFilterType, setSubmissionFilterType] = useState<string>("all");
-  const [selectedSubmissionDetails, setSelectedSubmissionDetails] = useState<any | null>(null);
+  // Add/Deduct Balance Form State
+  const [balanceUser, setBalanceUser] = useState<string>("");
+  const [balanceOperation, setBalanceOperation] = useState<"add" | "deduct" | "set">("add");
+  const [balanceAsset, setBalanceAsset] = useState<"realBalance" | "usdtBalance" | "btcBalance" | "demoBalance" | "stakedBalance">("realBalance");
+  const [balanceAmount, setBalanceAmount] = useState<string>("");
+  const [balanceNote, setBalanceNote] = useState<string>("");
+  const [balanceSubmitting, setBalanceSubmitting] = useState(false);
+  const [balanceSuccessMsg, setBalanceSuccessMsg] = useState<string | null>(null);
 
-  const switchAuthMode = (mode: "login" | "register") => {
-    setAuthMode(mode);
-    setLoginError("");
-    setUsernameInput("");
-    setEmailInput("");
-    setPasswordInput("");
-    setConfirmPasswordInput("");
-  };
+  // Chat Support States
+  const [activeChatId, setActiveChatId] = useState<string | null>(null);
+  const [chatReplyText, setChatReplyText] = useState("");
+  const [sendingChat, setSendingChat] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // Search & Filter States for logs
-  const [searchText, setSearchText] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState<string>("all");
-  const [selectedStatus, setSelectedStatus] = useState<string>("all");
-
-  // 1. Initial mounting & Session verification check
+  // 1. Initial Session Check
   useEffect(() => {
     setMounted(true);
-
-    const checkActiveSession = async () => {
+    const checkSession = async () => {
       try {
         const res = await fetch("/api/auth/session");
-        if (res.status === 200) {
+        if (res.ok) {
           const data = await res.json();
           if (data.user?.role === "Administrator") {
             setIsAuthenticated(true);
-            setActiveUser(data.user);
-            fetchLogsHistory();
-            fetchCredentials();
-          } else {
-            setIsAuthenticated(false);
-            setLoginError("Forbidden. Administrator access level required.");
+            setActiveAdmin(data.user);
+            fetchAllAdminData();
           }
         }
       } catch (err) {
-        console.error("Session fetch failed on mount:", err);
+        console.error("Session check error:", err);
       }
     };
-
-    checkActiveSession();
+    checkSession();
   }, []);
 
-  // Poll support chats for live admin desk in real-time
-  const fetchSupportChats = async () => {
+  // 2. Fetch All Data
+  const fetchAllAdminData = async () => {
+    setLoadingData(true);
     try {
-      const res = await fetch("/api/chat?all=true", { credentials: "include", cache: "no-store" });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.chats) {
-          setSupportChats(data.chats);
+      // Fetch users and submissions
+      const usersRes = await fetch("/api/admin/users", { cache: "no-store" });
+      if (usersRes.ok) {
+        const data = await usersRes.json();
+        setUsersList(data.users || []);
+        setSubmissionsList(data.submissions || []);
+        if (data.users?.length > 0 && !balanceUser) {
+          setBalanceUser(data.users[0].username);
+        }
+      }
+
+      // Fetch logs
+      const logsRes = await fetch("/api/logs");
+      if (logsRes.ok) {
+        const lData = await logsRes.json();
+        setLogs(lData.logs || []);
+      }
+
+      // Fetch chats
+      const chatRes = await fetch("/api/chat?all=true", { cache: "no-store" });
+      if (chatRes.ok) {
+        const cData = await chatRes.json();
+        setSupportChats(cData.chats || []);
+        if (cData.chats?.length > 0 && !activeChatId) {
+          setActiveChatId(cData.chats[0].id);
         }
       }
     } catch (err) {
-      console.error("Failed to fetch support chats:", err);
-    }
-  };
-
-  useEffect(() => {
-    if (!mounted || !isAuthenticated || adminTab !== "support") return;
-    fetchSupportChats();
-    const interval = setInterval(fetchSupportChats, 1500); // 1.5s live polling
-    return () => clearInterval(interval);
-  }, [mounted, isAuthenticated, adminTab]);
-
-  useEffect(() => {
-    if (activeAdminChatId) {
-      adminChatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    }
-  }, [activeAdminChatId, supportChats]);
-
-  const handleAdminSendMessage = async () => {
-    if (!activeAdminChatId || !adminReplyInput.trim()) return;
-    const textToSend = adminReplyInput.trim();
-    setAdminReplyInput("");
-
-    const optimisticMsg = {
-      id: `msg-${Date.now()}`,
-      sender: "Admin",
-      text: textToSend,
-      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      senderType: "admin"
-    };
-
-    setSupportChats((prev) =>
-      prev.map((c) =>
-        c.id === activeAdminChatId
-          ? { ...c, messages: [...c.messages, optimisticMsg], lastUpdated: new Date().toISOString() }
-          : c
-      )
-    );
-
-    try {
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          chatId: activeAdminChatId,
-          text: textToSend,
-          senderType: "admin"
-        })
-      });
-      if (res.ok) {
-        fetchSupportChats();
-      }
-    } catch (err) {
-      console.error("Failed to send admin support reply:", err);
-    }
-  };
-
-  // 2. Fetch logs history on active authentication
-  const fetchLogsHistory = async () => {
-    try {
-      const res = await fetch("/api/logs");
-      if (res.status === 200) {
-        const data = await res.json();
-        setLogs(data.logs);
-      }
-    } catch (err) {
-      console.error("Failed to read server logs history:", err);
-    }
-  };
-
-  // Fetch all registered admin credentials
-  const fetchCredentials = async () => {
-    setLoadingCredentials(true);
-    try {
-      const res = await fetch("/api/admin/users", { credentials: "include", cache: "no-store" });
-      if (res.ok) {
-        const data = await res.json();
-        setCredentialsList(data.users || []);
-        setSubmissionsList(data.submissions || []);
-      }
-    } catch (err) {
-      console.error("Failed to fetch credentials:", err);
+      console.error("Admin data fetch error:", err);
     } finally {
-      setLoadingCredentials(false);
+      setLoadingData(false);
     }
   };
 
-  const togglePasswordReveal = (username: string) => {
-    setRevealedPasswords((prev) => {
-      const next = new Set(prev);
-      if (next.has(username)) next.delete(username);
-      else next.add(username);
-      return next;
-    });
-  };
-
-  const copyToClipboard = async (text: string, fieldId: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopiedField(fieldId);
-      setTimeout(() => setCopiedField(null), 1500);
-    } catch {}
-  };
-
-  const handleToggleCredentials = () => {
-    const next = !showCredentials;
-    setShowCredentials(next);
-    if (next && credentialsList.length === 0) fetchCredentials();
-  };
-
-  // 3. Connect to real-time Server-Sent Events (SSE) Stream
+  // Poll chats periodically
   useEffect(() => {
-    if (!mounted || !isAuthenticated || !isLive) return;
-
-    // Open connection to server stream
-    const eventSource = new EventSource("/api/logs/stream");
-
-    eventSource.addEventListener("new-log", (event: any) => {
+    if (!isAuthenticated || activeTab !== "chats") return;
+    const interval = setInterval(async () => {
       try {
-        const newLog = JSON.parse(event.data);
+        const chatRes = await fetch("/api/chat?all=true", { cache: "no-store" });
+        if (chatRes.ok) {
+          const cData = await chatRes.json();
+          setSupportChats(cData.chats || []);
+        }
+      } catch {}
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [isAuthenticated, activeTab]);
+
+  // Scroll chat to bottom
+  useEffect(() => {
+    if (activeChatId) {
+      chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [activeChatId, supportChats]);
+
+  // SSE Live Logs
+  useEffect(() => {
+    if (!mounted || !isAuthenticated || !isLiveStream) return;
+    const es = new EventSource("/api/logs/stream");
+
+    es.addEventListener("new-log", (evt: any) => {
+      try {
+        const newL = JSON.parse(evt.data);
         setLogs((prev) => {
-          // Guard against duplicates
-          if (prev.some((log) => log.id === newLog.id)) return prev;
-          return [newLog, ...prev];
+          if (prev.some((x) => x.id === newL.id)) return prev;
+          return [newL, ...prev];
         });
-      } catch (e) {
-        console.error("Error parsing stream event data:", e);
-      }
+      } catch {}
     });
 
-    eventSource.addEventListener("clear-logs", () => {
+    es.addEventListener("clear-logs", () => {
       setLogs([]);
-      setSelectedLog(null);
     });
 
-    eventSource.onerror = () => {
-      // Re-establish connection automatically on network glitches
-      eventSource.close();
-    };
+    return () => es.close();
+  }, [mounted, isAuthenticated, isLiveStream]);
 
-    return () => {
-      eventSource.close();
-    };
-  }, [mounted, isAuthenticated, isLive]);
-
-
-  // 5. Admin Login
-  const handleLoginSubmit = async (e: React.FormEvent) => {
+  // Auth Submit Handlers
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError("");
-    setIsSubmitting(true);
-
+    setIsSubmittingAuth(true);
     try {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: usernameInput, password: passwordInput })
+        body: JSON.stringify({ username: usernameInput, password: passwordInput }),
       });
-
       const data = await res.json();
-
-      if (res.status === 200) {
-        if (data.user?.role === "Administrator") {
-          setIsAuthenticated(true);
-          setActiveUser(data.user);
-          setIsSubmitting(false);
-          fetchLogsHistory();
-          fetchCredentials();
-        } else {
-          setIsSubmitting(false);
-          setLoginError("Access Denied. Only administrators can access this terminal.");
+      if (res.ok && data.user?.role === "Administrator") {
+        setIsAuthenticated(true);
+        setActiveAdmin(data.user);
+        fetchAllAdminData();
+      } else {
+        setLoginError(data.error || "Access Denied. Administrator role required.");
+        if (data.user?.role !== "Administrator") {
           await fetch("/api/auth/logout", { method: "POST" });
         }
-      } else {
-        setIsSubmitting(false);
-        setLoginError(data.error || "Invalid username or password.");
-        setPasswordShaken(true);
-        setTimeout(() => setPasswordShaken(false), 500);
       }
-    } catch (err) {
-      setIsSubmitting(false);
-      setLoginError("Network error. Please try again.");
+    } catch {
+      setLoginError("Network connection failed.");
+    } finally {
+      setIsSubmittingAuth(false);
     }
   };
 
-  // 5b. Account Registration
-  const handleRegisterSubmit = async (e: React.FormEvent) => {
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError("");
-
     if (passwordInput !== confirmPasswordInput) {
       setLoginError("Passwords do not match.");
-      setPasswordShaken(true);
-      setTimeout(() => setPasswordShaken(false), 500);
       return;
     }
-
-    setIsSubmitting(true);
-
+    setIsSubmittingAuth(true);
     try {
       const res = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: usernameInput, email: emailInput, password: passwordInput, role: "Administrator" })
+        body: JSON.stringify({
+          username: usernameInput,
+          email: emailInput,
+          password: passwordInput,
+          role: "Administrator",
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.user?.role === "Administrator") {
+        setIsAuthenticated(true);
+        setActiveAdmin(data.user);
+        fetchAllAdminData();
+      } else {
+        setLoginError(data.error || "Registration failed.");
+      }
+    } catch {
+      setLoginError("Network connection failed.");
+    } finally {
+      setIsSubmittingAuth(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+      setIsAuthenticated(false);
+      setActiveAdmin(null);
+      setUsersList([]);
+      setSubmissionsList([]);
+      setLogs([]);
+      setSupportChats([]);
+    } catch {}
+  };
+
+  // Clipboard copy
+  const copyText = async (text: string, id: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedField(id);
+      setTimeout(() => setCopiedField(null), 1500);
+    } catch {}
+  };
+
+  // Toggle single password visibility
+  const togglePassword = (uname: string) => {
+    setRevealedPasswords((prev) => {
+      const next = new Set(prev);
+      if (next.has(uname)) next.delete(uname);
+      else next.add(uname);
+      return next;
+    });
+  };
+
+  // Balance Adjustment Submit
+  const handleBalanceSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBalanceSuccessMsg(null);
+    const num = parseFloat(balanceAmount);
+    if (isNaN(num) || num <= 0) {
+      alert("Please enter a valid positive number.");
+      return;
+    }
+    if (!balanceUser) {
+      alert("Please select a user account.");
+      return;
+    }
+
+    setBalanceSubmitting(true);
+    try {
+      const res = await fetch("/api/admin/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "adjust_balance",
+          username: balanceUser,
+          operation: balanceOperation,
+          asset: balanceAsset,
+          amount: num,
+          note: balanceNote || "Admin dashboard adjustment",
+        }),
       });
 
       const data = await res.json();
+      if (res.ok && data.success) {
+        setBalanceSuccessMsg(`Success! ${balanceOperation === "add" ? "Added" : balanceOperation === "deduct" ? "Deducted" : "Set"} ${num.toLocaleString()} ${balanceAsset} for ${balanceUser}.`);
+        setBalanceAmount("");
+        setBalanceNote("");
 
-      if (res.status === 200) {
-        if (data.user?.role === "Administrator") {
-          setIsAuthenticated(true);
-          setActiveUser(data.user);
-          setIsSubmitting(false);
-          fetchLogsHistory();
-          fetchCredentials();
-        } else {
-          setIsSubmitting(false);
-          setLoginError("Access Denied. Registration successful, but admin rights are required.");
-          await fetch("/api/auth/logout", { method: "POST" });
+        // Also update local storage for this user so active client instances pick it up immediately
+        const userObj = usersList.find((u) => u.username.toLowerCase() === balanceUser.toLowerCase());
+        if (userObj && typeof window !== "undefined") {
+          const storageKey = `brokerage_balances_${balanceUser.toLowerCase()}`;
+          const currentReal = userObj.realBalance;
+          const newReal = balanceAsset === "realBalance" || balanceAsset === "usdtBalance"
+            ? (balanceOperation === "add" ? currentReal + num : balanceOperation === "deduct" ? Math.max(0, currentReal - num) : num)
+            : currentReal;
+          
+          localStorage.setItem(storageKey, JSON.stringify({
+            realBalance: newReal,
+            usdtBalance: newReal,
+            demoBalance: userObj.demoBalance,
+            btcBalance: balanceAsset === "btcBalance" 
+              ? (balanceOperation === "add" ? userObj.btcBalance + num : balanceOperation === "deduct" ? Math.max(0, userObj.btcBalance - num) : num)
+              : userObj.btcBalance,
+            stakedBalance: balanceAsset === "stakedBalance"
+              ? (balanceOperation === "add" ? userObj.stakedBalance + num : balanceOperation === "deduct" ? Math.max(0, userObj.stakedBalance - num) : num)
+              : userObj.stakedBalance,
+            miningEarnings: userObj.miningEarnings,
+          }));
         }
+
+        // Refresh users and logs
+        fetchAllAdminData();
+        setTimeout(() => setBalanceSuccessMsg(null), 5000);
       } else {
-        setIsSubmitting(false);
-        setLoginError(data.error || "Registration failed. Please try again.");
-        setPasswordShaken(true);
-        setTimeout(() => setPasswordShaken(false), 500);
+        alert(data.error || "Failed to adjust balance.");
+      }
+    } catch {
+      alert("Network error updating balance.");
+    } finally {
+      setBalanceSubmitting(false);
+    }
+  };
+
+  // Quick Action from Table to open Balance tool with user selected
+  const triggerBalanceForUser = (uname: string, op: "add" | "deduct" = "add") => {
+    setBalanceUser(uname);
+    setBalanceOperation(op);
+    setActiveTab("balance");
+  };
+
+  // Submission Status update
+  const handleUpdateSubmissionStatus = async (id: string, status: "Approved" | "Pending" | "Cancelled") => {
+    try {
+      const res = await fetch("/api/submissions", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, status }),
+      });
+      if (res.ok) {
+        setSubmissionsList((prev) =>
+          prev.map((s) => (s.id === id ? { ...s, status } : s))
+        );
+        fetchAllAdminData();
       }
     } catch (err) {
-      setIsSubmitting(false);
-      setLoginError("Network error. Please try again.");
+      console.error("Status update error:", err);
     }
   };
 
-  // 6. Lock Terminal / De-authorize
-  const handleLockTerminal = async () => {
+  // Send Admin Chat Reply
+  const handleSendChatReply = async () => {
+    if (!activeChatId || !chatReplyText.trim()) return;
+    const text = chatReplyText.trim();
+    setChatReplyText("");
+    setSendingChat(true);
+
     try {
-      const res = await fetch("/api/auth/logout", { method: "POST" });
-      if (res.status === 200) {
-        setIsAuthenticated(false);
-        setActiveUser(null);
-        setUsernameInput("");
-        setEmailInput("");
-        setPasswordInput("");
-        setConfirmPasswordInput("");
-        setLogs([]);
-        setSelectedLog(null);
-      }
-    } catch (e) {
-      console.error("Lock connection reset:", e);
-    }
-  };
-
-  // 7. Clear database logs
-  const handleClearLogs = async () => {
-    if (confirm("Are you sure you want to purge the central server logs database?")) {
-      try {
-        const res = await fetch("/api/logs", { method: "DELETE" });
-        if (res.status === 200) {
-          setLogs([]);
-          setSelectedLog(null);
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chatId: activeChatId,
+          text,
+          senderType: "admin",
+        }),
+      });
+      if (res.ok) {
+        const cRes = await fetch("/api/chat?all=true", { cache: "no-store" });
+        if (cRes.ok) {
+          const cData = await cRes.json();
+          setSupportChats(cData.chats || []);
         }
-      } catch (err) {
-        console.error("Purge command execution failure:", err);
       }
+    } catch (err) {
+      console.error("Send chat reply failed:", err);
+    } finally {
+      setSendingChat(false);
     }
   };
 
-  const handleExportCSV = () => {
-    if (logs.length === 0) return;
-    
-    let csvContent = "data:text/csv;charset=utf-8,";
-    csvContent += "ID,Timestamp,User,Email,Role,Action,Category,Status,Severity,IP Address,Location,Browser\n";
-    
-    logs.forEach((log) => {
-      const row = [
-        log.id,
-        log.timestamp,
-        `"${log.userName}"`,
-        `"${log.userEmail}"`,
-        `"${log.userRole}"`,
-        `"${log.action.replace(/"/g, '""')}"`,
-        log.category,
-        log.status,
-        log.severity,
-        log.ipAddress,
-        `"${log.location}"`,
-        `"${log.browser.replace(/"/g, '""')}"`
-      ].join(",");
-      csvContent += row + "\n";
-    });
-
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `server_activity_logs_${new Date().toISOString().slice(0,10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  // Delete User Handler
+  const handleDeleteUser = async (uname: string) => {
+    if (!confirm(`Are you sure you want to permanently delete user "${uname}"?`)) return;
+    try {
+      const res = await fetch("/api/admin/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "delete_user", username: uname }),
+      });
+      if (res.ok) {
+        setUsersList((prev) => prev.filter((u) => u.username.toLowerCase() !== uname.toLowerCase()));
+        if (inspectUser?.username.toLowerCase() === uname.toLowerCase()) setInspectUser(null);
+      } else {
+        const d = await res.json();
+        alert(d.error || "Could not delete user.");
+      }
+    } catch {
+      alert("Error deleting user.");
+    }
   };
 
-  // Log filter matching
-  const filteredLogs = useMemo(() => {
-    return logs.filter((log) => {
-      const matchSearch = 
-        log.action.toLowerCase().includes(searchText.toLowerCase()) ||
-        log.userName.toLowerCase().includes(searchText.toLowerCase()) ||
-        log.ipAddress.includes(searchText) ||
-        log.location.toLowerCase().includes(searchText.toLowerCase());
-
-      const matchCategory = selectedCategory === "all" || log.category === selectedCategory;
-      const matchStatus = selectedStatus === "all" || log.status === selectedStatus;
-
-      return matchSearch && matchCategory && matchStatus;
-    });
-  }, [logs, searchText, selectedCategory, selectedStatus]);
-
-  // Accounts filter matching
-  const filteredAccounts = useMemo(() => {
-    if (!accountSearchText.trim()) return credentialsList;
-    const term = accountSearchText.toLowerCase();
-    return credentialsList.filter((u: any) =>
-      u.username?.toLowerCase().includes(term) ||
-      u.email?.toLowerCase().includes(term) ||
-      u.firstName?.toLowerCase().includes(term) ||
-      u.lastName?.toLowerCase().includes(term) ||
-      u.phone?.toLowerCase().includes(term) ||
+  // Filtered Accounts
+  const filteredUsers = useMemo(() => {
+    if (!accountSearch.trim()) return usersList;
+    const term = accountSearch.toLowerCase();
+    return usersList.filter((u) =>
+      u.username.toLowerCase().includes(term) ||
+      u.email.toLowerCase().includes(term) ||
       u.country?.toLowerCase().includes(term) ||
-      u.referralCode?.toLowerCase().includes(term) ||
-      u.role?.toLowerCase().includes(term)
+      u.phone?.toLowerCase().includes(term) ||
+      u.role.toLowerCase().includes(term) ||
+      u.referralCode?.toLowerCase().includes(term)
     );
-  }, [credentialsList, accountSearchText]);
+  }, [usersList, accountSearch]);
 
-  // Submissions filter matching
+  // Filtered Submissions
   const filteredSubmissions = useMemo(() => {
-    return submissionsList.filter((sub: any) => {
-      const matchType = submissionFilterType === "all" || sub.type === submissionFilterType;
-      const term = submissionSearchText.toLowerCase();
+    return submissionsList.filter((s) => {
+      const matchesType = 
+        submissionFilter === "all" ||
+        (submissionFilter === "deposit" && s.type === "deposit") ||
+        (submissionFilter === "withdraw" && (s.type === "withdraw" || s.type === "withdrawal")) ||
+        s.status === submissionFilter;
+
+      const term = submissionSearch.toLowerCase();
+      const matchesSearch =
+        !term ||
+        s.username.toLowerCase().includes(term) ||
+        s.email.toLowerCase().includes(term) ||
+        s.reference.toLowerCase().includes(term) ||
+        s.method.toLowerCase().includes(term) ||
+        s.totalUsd.toLowerCase().includes(term);
+
+      return matchesType && matchesSearch;
+    });
+  }, [submissionsList, submissionFilter, submissionSearch]);
+
+  // Filtered Logs
+  const filteredLogs = useMemo(() => {
+    return logs.filter((l) => {
+      const matchCat = logCategoryFilter === "all" || l.category === logCategoryFilter;
+      const term = logSearch.toLowerCase();
       const matchSearch =
         !term ||
-        sub.username?.toLowerCase().includes(term) ||
-        sub.email?.toLowerCase().includes(term) ||
-        sub.reference?.toLowerCase().includes(term) ||
-        sub.method?.toLowerCase().includes(term) ||
-        sub.status?.toLowerCase().includes(term) ||
-        sub.totalUsd?.toLowerCase().includes(term);
-      return matchType && matchSearch;
+        l.userName.toLowerCase().includes(term) ||
+        l.action.toLowerCase().includes(term) ||
+        l.ipAddress.includes(term);
+      return matchCat && matchSearch;
     });
-  }, [submissionsList, submissionSearchText, submissionFilterType]);
+  }, [logs, logCategoryFilter, logSearch]);
+
+  // Selected Chat Object
+  const currentChat = useMemo(() => {
+    return supportChats.find((c) => c.id === activeChatId) || supportChats[0] || null;
+  }, [supportChats, activeChatId]);
+
+  // Selected User Object for balance calculations
+  const selectedBalanceUserObj = useMemo(() => {
+    return usersList.find((u) => u.username.toLowerCase() === balanceUser.toLowerCase());
+  }, [usersList, balanceUser]);
+
+  // Total Summary Stats
+  const totalBalanceAllUsers = useMemo(() => {
+    return usersList.reduce((acc, u) => acc + (u.realBalance || 0), 0);
+  }, [usersList]);
+
+  const pendingSubmissionsCount = useMemo(() => {
+    return submissionsList.filter((s) => s.status === "Pending").length;
+  }, [submissionsList]);
 
   if (!mounted) {
     return (
-      <div className="h-full w-full flex items-center justify-center text-muted-foreground text-sm">
-        Initializing Security Node...
+      <div className="min-h-[70vh] flex items-center justify-center text-muted-foreground text-sm">
+        <RefreshCw className="w-5 h-5 animate-spin mr-2 text-brand" /> Initializing Admin Center...
       </div>
     );
   }
 
-  // Auth Screen
+  // -------------------------------------------------------------
+  // AUTHENTICATION SCREEN (When not logged in as Administrator)
+  // -------------------------------------------------------------
   if (!isAuthenticated) {
     return (
-      <div className="min-h-[80vh] flex items-center justify-center p-4">
-        <div className="absolute top-1/4 left-1/4 w-72 h-72 bg-brand/10 rounded-full blur-3xl -z-10 animate-pulse"></div>
-        <div className="absolute bottom-1/4 right-1/4 w-72 h-72 bg-purple-500/10 rounded-full blur-3xl -z-10 animate-pulse"></div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0, x: passwordShaken ? [0, -10, 10, -10, 10, 0] : 0 }}
-          transition={{ duration: 0.5 }}
-          className="w-full max-w-md relative z-10"
-        >
-          <GlassCard className="border border-white/10 shadow-[0_12px_40px_0_rgba(0,0,0,0.5)] p-8 flex flex-col items-center">
-
-            {/* Header */}
-            <div className="relative mb-5">
-              <div className="w-16 h-16 rounded-full bg-brand/10 flex items-center justify-center border border-brand/30">
-                {authMode === "login"
-                  ? <Lock className="w-7 h-7 text-brand" />
-                  : <ShieldCheck className="w-7 h-7 text-brand" />
-                }
+      <div className="min-h-[85vh] flex items-center justify-center p-4">
+        <div className="w-full max-w-md">
+          <GlassCard className="p-8 border-white/10 shadow-2xl relative overflow-hidden">
+            <div className="flex flex-col items-center mb-6 text-center">
+              <div className="w-14 h-14 rounded-2xl bg-brand/10 border border-brand/30 flex items-center justify-center text-brand mb-4 box-glow">
+                <Lock className="w-7 h-7" />
               </div>
+              <h1 className="text-2xl font-bold text-white tracking-tight">Admin Console</h1>
+              <p className="text-xs text-muted-foreground mt-1">
+                Enter your administrative credentials to access management tools.
+              </p>
             </div>
 
-            <h2 className="text-2xl font-extrabold text-white text-center mb-1">
-              {authMode === "login" ? "Admin Portal" : "Create Account"}
-            </h2>
-            <p className="text-xs text-muted-foreground text-center mb-5 max-w-xs leading-relaxed">
-              {authMode === "login"
-                ? "Sign in to access the system activity log console."
-                : "Register a new administrator account to get started."}
-            </p>
-
-            {/* Tab switcher */}
-            <div className="flex w-full bg-black/40 rounded-lg p-1 mb-5 border border-white/5">
+            {/* Toggle Tabs */}
+            <div className="flex bg-black/40 p-1 rounded-xl mb-5 border border-white/5">
               <button
                 type="button"
-                onClick={() => switchAuthMode("login")}
-                className={`flex-1 py-1.5 rounded-md text-xs font-semibold transition-all ${
-                  authMode === "login"
-                    ? "bg-brand text-white shadow"
-                    : "text-muted-foreground hover:text-white"
+                onClick={() => { setAuthMode("login"); setLoginError(""); }}
+                className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all ${
+                  authMode === "login" ? "bg-brand text-white shadow" : "text-muted-foreground hover:text-white"
                 }`}
               >
                 Sign In
               </button>
               <button
                 type="button"
-                onClick={() => switchAuthMode("register")}
-                className={`flex-1 py-1.5 rounded-md text-xs font-semibold transition-all ${
-                  authMode === "register"
-                    ? "bg-brand text-white shadow"
-                    : "text-muted-foreground hover:text-white"
+                onClick={() => { setAuthMode("register"); setLoginError(""); }}
+                className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all ${
+                  authMode === "register" ? "bg-brand text-white shadow" : "text-muted-foreground hover:text-white"
                 }`}
               >
-                Create Account
+                Create Admin
               </button>
             </div>
 
-            {/* Error alert */}
-            <AnimatePresence>
-              {loginError && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="w-full bg-red-500/10 border border-red-500/30 rounded-lg p-3 mb-4 flex items-start gap-2 text-xs text-red-400"
+            {loginError && (
+              <div className="p-3 mb-4 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-xs flex items-center gap-2">
+                <ShieldAlert className="w-4 h-4 shrink-0" />
+                <span>{loginError}</span>
+              </div>
+            )}
+
+            {authMode === "login" ? (
+              <form onSubmit={handleLogin} className="space-y-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">Admin Username / Email</label>
+                  <div className="relative">
+                    <Fingerprint className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                    <input
+                      type="text"
+                      required
+                      placeholder="Username or email"
+                      value={usernameInput}
+                      onChange={(e) => setUsernameInput(e.target.value)}
+                      className="w-full bg-black/30 border border-white/10 rounded-lg pl-9 pr-3 py-2.5 text-sm text-white focus:outline-none focus:border-brand"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">Password</label>
+                  <div className="relative">
+                    <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                    <input
+                      type="password"
+                      required
+                      placeholder="••••••••"
+                      value={passwordInput}
+                      onChange={(e) => setPasswordInput(e.target.value)}
+                      className="w-full bg-black/30 border border-white/10 rounded-lg pl-9 pr-3 py-2.5 text-sm text-white focus:outline-none focus:border-brand"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isSubmittingAuth}
+                  className="w-full py-2.5 bg-brand hover:bg-brand/90 text-white rounded-lg font-bold text-sm transition-all flex items-center justify-center gap-2 mt-2 cursor-pointer"
                 >
-                  <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5" />
-                  <span>{loginError}</span>
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            <AnimatePresence mode="wait">
-              {authMode === "login" ? (
-                <motion.form
-                  key="login"
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: 10 }}
-                  transition={{ duration: 0.2 }}
-                  onSubmit={handleLoginSubmit}
-                  className="w-full space-y-4"
+                  {isSubmittingAuth ? <RefreshCw className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
+                  <span>Sign In as Admin</span>
+                </button>
+              </form>
+            ) : (
+              <form onSubmit={handleRegister} className="space-y-3.5">
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">Username</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Admin username"
+                    value={usernameInput}
+                    onChange={(e) => setUsernameInput(e.target.value)}
+                    className="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-brand"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">Email Address</label>
+                  <input
+                    type="email"
+                    required
+                    placeholder="admin@brokerage.com"
+                    value={emailInput}
+                    onChange={(e) => setEmailInput(e.target.value)}
+                    className="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-brand"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">Password</label>
+                  <input
+                    type="password"
+                    required
+                    placeholder="Min. 6 characters"
+                    value={passwordInput}
+                    onChange={(e) => setPasswordInput(e.target.value)}
+                    className="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-brand"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">Confirm Password</label>
+                  <input
+                    type="password"
+                    required
+                    placeholder="Re-enter password"
+                    value={confirmPasswordInput}
+                    onChange={(e) => setConfirmPasswordInput(e.target.value)}
+                    className="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-brand"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={isSubmittingAuth}
+                  className="w-full py-2.5 bg-brand hover:bg-brand/90 text-white rounded-lg font-bold text-sm transition-all flex items-center justify-center gap-2 mt-2 cursor-pointer"
                 >
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground block">
-                      Username
-                    </label>
-                    <div className="relative">
-                      <Fingerprint className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                      <input
-                        type="text"
-                        required
-                        placeholder="Enter your username..."
-                        value={usernameInput}
-                        onChange={(e) => setUsernameInput(e.target.value)}
-                        disabled={isSubmitting}
-                        className="w-full bg-black/40 border border-white/10 rounded-lg pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand focus:border-brand transition-all text-white placeholder-muted-foreground disabled:opacity-50"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground block">
-                      Password
-                    </label>
-                    <div className="relative">
-                      <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                      <input
-                        type="text"
-                        required
-                        placeholder="••••••••"
-                        value={passwordInput}
-                        onChange={(e) => setPasswordInput(e.target.value)}
-                        disabled={isSubmitting}
-                        className="w-full bg-black/40 border border-white/10 rounded-lg pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand focus:border-brand transition-all text-white placeholder-muted-foreground disabled:opacity-50"
-                      />
-                    </div>
-                  </div>
-
-                  <button
-                    type="submit"
-                    disabled={isSubmitting}
-                    className="w-full py-2.5 bg-brand hover:bg-brand/90 text-white rounded-lg font-bold text-sm transition-all flex justify-center items-center gap-2 disabled:opacity-50 mt-2"
-                  >
-                    {isSubmitting ? (
-                      <><RefreshCw className="w-4 h-4 animate-spin" /><span>Signing in...</span></>
-                    ) : (
-                      <><ShieldCheck className="w-4 h-4" /><span>Sign In</span></>
-                    )}
-                  </button>
-
-                  <p className="text-center text-[11px] text-muted-foreground pt-1">
-                    No account?{" "}
-                    <button type="button" onClick={() => switchAuthMode("register")} className="text-brand hover:underline font-semibold">
-                      Create one
-                    </button>
-                  </p>
-                </motion.form>
-              ) : (
-                <motion.form
-                  key="register"
-                  initial={{ opacity: 0, x: 10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -10 }}
-                  transition={{ duration: 0.2 }}
-                  onSubmit={handleRegisterSubmit}
-                  className="w-full space-y-3.5"
-                >
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground block">
-                      Username
-                    </label>
-                    <div className="relative">
-                      <Fingerprint className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                      <input
-                        type="text"
-                        required
-                        placeholder="Choose a username..."
-                        value={usernameInput}
-                        onChange={(e) => setUsernameInput(e.target.value)}
-                        disabled={isSubmitting}
-                        className="w-full bg-black/40 border border-white/10 rounded-lg pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand focus:border-brand transition-all text-white placeholder-muted-foreground disabled:opacity-50"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground block">
-                      Email Address
-                    </label>
-                    <div className="relative">
-                      <Globe className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                      <input
-                        type="email"
-                        required
-                        placeholder="you@example.com"
-                        value={emailInput}
-                        onChange={(e) => setEmailInput(e.target.value)}
-                        disabled={isSubmitting}
-                        className="w-full bg-black/40 border border-white/10 rounded-lg pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand focus:border-brand transition-all text-white placeholder-muted-foreground disabled:opacity-50"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground block">
-                      Password
-                    </label>
-                    <div className="relative">
-                      <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                      <input
-                        type="text"
-                        required
-                        placeholder="Min. 6 characters"
-                        value={passwordInput}
-                        onChange={(e) => setPasswordInput(e.target.value)}
-                        disabled={isSubmitting}
-                        className="w-full bg-black/40 border border-white/10 rounded-lg pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand focus:border-brand transition-all text-white placeholder-muted-foreground disabled:opacity-50"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground block">
-                      Confirm Password
-                    </label>
-                    <div className="relative">
-                      <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                      <input
-                        type="password"
-                        required
-                        placeholder="Re-enter password"
-                        value={confirmPasswordInput}
-                        onChange={(e) => setConfirmPasswordInput(e.target.value)}
-                        disabled={isSubmitting}
-                        className="w-full bg-black/40 border border-white/10 rounded-lg pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand focus:border-brand transition-all text-white placeholder-muted-foreground disabled:opacity-50"
-                      />
-                    </div>
-                  </div>
-
-                  <button
-                    type="submit"
-                    disabled={isSubmitting}
-                    className="w-full py-2.5 bg-brand hover:bg-brand/90 text-white rounded-lg font-bold text-sm transition-all flex justify-center items-center gap-2 disabled:opacity-50 mt-1"
-                  >
-                    {isSubmitting ? (
-                      <><RefreshCw className="w-4 h-4 animate-spin" /><span>Creating account...</span></>
-                    ) : (
-                      <><ShieldCheck className="w-4 h-4" /><span>Create Account</span></>
-                    )}
-                  </button>
-
-                  <p className="text-center text-[11px] text-muted-foreground pt-1">
-                    Already have an account?{" "}
-                    <button type="button" onClick={() => switchAuthMode("login")} className="text-brand hover:underline font-semibold">
-                      Sign in
-                    </button>
-                  </p>
-                </motion.form>
-              )}
-            </AnimatePresence>
-
+                  {isSubmittingAuth ? <RefreshCw className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
+                  <span>Register Administrator</span>
+                </button>
+              </form>
+            )}
           </GlassCard>
-        </motion.div>
+        </div>
       </div>
     );
   }
 
-  // Authorized Admin Portal Layout
+  // -------------------------------------------------------------
+  // AUTHENTICATED MINIMALIST ADMIN DASHBOARD
+  // -------------------------------------------------------------
   return (
-    <div className="max-w-7xl mx-auto space-y-6 pb-16">
+    <div className="max-w-7xl mx-auto space-y-6 pb-20 pt-2 px-2 sm:px-4">
       
-      {/* HEADER & CONTROLS */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-white/5 pb-5">
+      {/* TOP HEADER */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-white/10">
         <div>
-          <h1 className="text-2xl font-extrabold tracking-tight text-white flex items-center gap-2">
-            <Terminal className="w-6 h-6 text-brand" /> System Activity Log Console
-          </h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
+              <Terminal className="w-6 h-6 text-brand" /> Admin Dashboard
+            </h1>
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+              Live Control
+            </span>
+          </div>
           <p className="text-xs text-muted-foreground mt-1">
-            Real-time streaming backend logs database. Active Admin session: <span className="text-brand font-semibold">{activeUser?.role}</span>
+            Logged in as <span className="text-white font-semibold">{activeAdmin?.username}</span> ({activeAdmin?.role})
           </p>
         </div>
-        
-        {/* ACTIONS */}
-        <div className="flex flex-wrap items-center gap-2.5 bg-black/40 p-1.5 rounded-lg border border-white/5 backdrop-blur-md">
-          {/* Pause / Resume Ticker */}
-          <button 
-            onClick={() => setIsLive(!isLive)}
-            className={`px-3 py-1.5 rounded-md font-medium text-xs flex items-center gap-1.5 transition-all ${
-              isLive 
-                ? "bg-brand/10 hover:bg-brand/20 text-brand border border-brand/20 box-glow" 
-                : "bg-white/5 hover:bg-white/10 text-muted-foreground border border-white/5"
-            }`}
-          >
-            {isLive ? (
-              <>
-                <span className="w-1.5 h-1.5 rounded-full bg-brand animate-ping"></span>
-                <span>Streaming Live</span>
-              </>
-            ) : (
-              <>
-                <Pause className="w-3 h-3" />
-                <span>Paused</span>
-              </>
-            )}
-          </button>
 
-          {/* Export CSV */}
-          <button 
-            onClick={handleExportCSV}
-            title="Export spreadsheet to CSV sheet"
-            className="p-1.5 bg-white/5 hover:bg-white/10 text-white rounded-md border border-white/10 transition-colors"
-          >
-            <Download className="w-3.5 h-3.5" />
-          </button>
-
-          {/* Clear Logs */}
-          <button 
-            onClick={handleClearLogs}
-            title="Purge activity database"
-            className="p-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-500 rounded-md border border-red-500/20 transition-colors"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
-
-          {/* Credentials panel toggle */}
+        {/* Quick Tools */}
+        <div className="flex items-center gap-2">
           <button
-            onClick={handleToggleCredentials}
-            title="View all registered accounts"
-            className={`px-2.5 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1 border ${
-              showCredentials
-                ? "bg-amber-500/25 border-amber-500/35 text-amber-400"
-                : "bg-white/5 border-white/10 text-muted-foreground hover:text-white hover:bg-white/10"
-            }`}
+            onClick={fetchAllAdminData}
+            title="Refresh database"
+            className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-muted-foreground hover:text-white border border-white/10 transition-colors flex items-center gap-1.5 text-xs"
           >
-            <KeyRound className="w-3.5 h-3.5" /> Accounts
+            <RefreshCw className={`w-3.5 h-3.5 ${loadingData ? "animate-spin text-brand" : ""}`} />
+            <span className="hidden sm:inline">Refresh</span>
           </button>
 
-          {/* Lock terminal logout */}
-          <button 
-            onClick={handleLockTerminal}
-            title="Lock Console / Sign out session"
-            className="px-2.5 py-1.5 bg-red-500/25 hover:bg-red-500/35 border border-red-500/35 rounded-md text-red-500 text-xs font-bold transition-all flex items-center gap-1 box-glow"
+          <button
+            onClick={() => triggerBalanceForUser(usersList[0]?.username || "")}
+            className="px-3 py-2 rounded-lg bg-brand hover:bg-brand/90 text-white font-medium text-xs flex items-center gap-1.5 shadow transition-all cursor-pointer"
           >
-            <Lock className="w-3.5 h-3.5 text-red-500" /> Lock Terminal
+            <PlusCircle className="w-3.5 h-3.5" />
+            <span>Add / Deduct Funds</span>
+          </button>
+
+          <button
+            onClick={handleLogout}
+            title="Lock & Logout"
+            className="p-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 transition-colors flex items-center gap-1.5 text-xs"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Lock</span>
           </button>
         </div>
       </div>
 
-      {/* Admin Tab Switcher */}
-      <div className="flex flex-wrap bg-black/40 rounded-lg p-1 border border-white/5 gap-1 mb-2">
-        <button
-          onClick={() => setAdminTab("logs")}
-          className={`flex-1 min-w-[100px] py-1.5 rounded-md text-xs font-semibold transition-all ${
-            adminTab === "logs" ? "bg-brand text-white shadow-sm" : "text-muted-foreground hover:text-white"
-          }`}
-        >
-          Console Logs
-        </button>
-        <button
-          onClick={() => setAdminTab("support")}
-          className={`flex-1 min-w-[100px] py-1.5 rounded-md text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${
-            adminTab === "support" ? "bg-brand text-white shadow-sm" : "text-muted-foreground hover:text-white"
-          }`}
-        >
-          <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
-          Live Support
-        </button>
-        <button
-          onClick={() => { setAdminTab("accounts"); if (credentialsList.length === 0) fetchCredentials(); }}
-          className={`flex-1 min-w-[100px] py-1.5 rounded-md text-xs font-semibold transition-all ${
-            adminTab === "accounts" ? "bg-brand text-white shadow-sm" : "text-muted-foreground hover:text-white"
-          }`}
-        >
-          All Accounts
-        </button>
-        <button
-          onClick={() => { setAdminTab("submissions"); if (submissionsList.length === 0) fetchCredentials(); }}
-          className={`flex-1 min-w-[100px] py-1.5 rounded-md text-xs font-semibold transition-all ${
-            adminTab === "submissions" ? "bg-brand text-white shadow-sm" : "text-muted-foreground hover:text-white"
-          }`}
-        >
-          Submissions
-        </button>
+      {/* NAVIGATION TABS */}
+      <div className="flex overflow-x-auto no-scrollbar gap-1.5 bg-black/40 p-1.5 rounded-xl border border-white/5 backdrop-blur-md">
+        {[
+          { id: "dashboard", label: "Overview", icon: Landmark, count: null },
+          { id: "accounts", label: "Accounts", icon: Users, count: usersList.length },
+          { id: "balance", label: "Add / Deduct Funds", icon: DollarSign, count: null },
+          { id: "submissions", label: "Deposits & Withdrawals", icon: ArrowUpRight, count: pendingSubmissionsCount > 0 ? pendingSubmissionsCount : null, alert: pendingSubmissionsCount > 0 },
+          { id: "chats", label: "Support Chats", icon: MessageSquare, count: supportChats.length },
+          { id: "logs", label: "Activity Logs", icon: Terminal, count: null },
+        ].map((tab) => {
+          const Icon = tab.icon;
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as any)}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                isActive
+                  ? "bg-brand text-white shadow-md shadow-brand/20"
+                  : "text-muted-foreground hover:text-white hover:bg-white/5"
+              }`}
+            >
+              <Icon className="w-3.5 h-3.5" />
+              <span>{tab.label}</span>
+              {tab.count !== null && (
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                  isActive ? "bg-white/20 text-white" : tab.alert ? "bg-amber-500/20 text-amber-300 border border-amber-500/30" : "bg-white/10 text-muted-foreground"
+                }`}>
+                  {tab.count}
+                </span>
+              )}
+            </button>
+          );
+        })}
       </div>
 
-      {/* CREDENTIALS PANEL (MODAL/DRAWER) */}
-      {showCredentials && (
-        <GlassCard className="p-5 border border-amber-500/20 bg-amber-500/5 space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <Users className="w-4 h-4 text-amber-400" />
-              <h2 className="text-sm font-bold text-white">All Registered User Accounts & Passwords</h2>
-              <span className="text-[10px] bg-amber-500/10 border border-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded font-semibold">
-                {filteredAccounts.length} / {credentialsList.length} account{credentialsList.length !== 1 ? "s" : ""}
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setRevealAllPasswords(!revealAllPasswords)}
-                className="text-[10px] px-2.5 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20 rounded font-semibold transition-colors flex items-center gap-1 cursor-pointer"
-              >
-                {revealAllPasswords ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
-                {revealAllPasswords ? "Hide Passwords" : "Reveal All Passwords"}
-              </button>
-              <button
-                onClick={fetchCredentials}
-                disabled={loadingCredentials}
-                className="text-[10px] text-muted-foreground hover:text-white flex items-center gap-1 transition-colors disabled:opacity-50 cursor-pointer"
-              >
-                <RefreshCw className={`w-3 h-3 ${loadingCredentials ? "animate-spin" : ""}`} />
-                Refresh
-              </button>
-            </div>
-          </div>
-
-          {/* Quick Filter */}
-          <div className="relative w-full">
-            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-            <input
-              type="text"
-              placeholder="Search by username, email, phone, name, country, or role..."
-              value={accountSearchText}
-              onChange={(e) => setAccountSearchText(e.target.value)}
-              className="w-full bg-black/40 border border-white/10 rounded-lg pl-9 pr-4 py-1.5 text-xs text-white placeholder-muted-foreground focus:outline-none focus:border-amber-400"
-            />
-          </div>
-
-          {loadingCredentials ? (
-            <div className="flex items-center justify-center py-8 text-muted-foreground text-xs gap-2">
-              <RefreshCw className="w-4 h-4 animate-spin" /> Loading credentials...
-            </div>
-          ) : filteredAccounts.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground text-xs">
-              No registered user accounts found matching query.
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-              {filteredAccounts.map((user: any) => {
-                const isRevealed = revealAllPasswords || revealedPasswords.has(user.username);
-                const copyUserId = `u-${user.username}`;
-                const copyPassId = `p-${user.username}`;
-                const copyEmailId = `e-${user.username}`;
-                return (
-                  <div
-                    key={user.username}
-                    className="bg-black/50 border border-white/10 rounded-xl p-4 space-y-2.5 hover:border-amber-500/40 transition-colors shadow-md"
-                  >
-                    {/* Header */}
-                    <div className="flex items-center justify-between gap-2 border-b border-white/5 pb-2">
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-amber-500/40 to-orange-500/40 border border-amber-500/30 flex items-center justify-center text-amber-300 font-extrabold text-xs shrink-0">
-                          {user.avatar || user.username.substring(0, 2).toUpperCase()}
-                        </div>
-                        <div className="min-w-0">
-                          <div className="text-xs font-bold text-white truncate">{user.username}</div>
-                          <span className={`text-[9px] font-bold uppercase px-1.5 py-0.2 rounded ${
-                            user.role === "Administrator" ? "bg-red-500/10 text-red-400 border border-red-500/20" : "bg-brand/10 text-brand border border-brand/20"
-                          }`}>
-                            {user.role}
-                          </span>
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => copyToClipboard(user.username, copyUserId)}
-                        title="Copy Username"
-                        className="text-muted-foreground hover:text-white p-1 text-[10px]"
-                      >
-                        {copiedField === copyUserId ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
-                      </button>
-                    </div>
-
-                    {/* Email */}
-                    <div className="space-y-0.5">
-                      <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold">Email</div>
-                      <div className="flex items-center gap-1.5 bg-black/40 p-1.5 rounded border border-white/5">
-                        <span className="text-xs text-slate-200 truncate flex-1 font-mono">{user.email}</span>
-                        <button
-                          onClick={() => copyToClipboard(user.email, copyEmailId)}
-                          className="shrink-0 text-muted-foreground hover:text-white p-0.5"
-                          title="Copy email"
-                        >
-                          {copiedField === copyEmailId ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Password */}
-                    <div className="space-y-0.5">
-                      <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold flex justify-between">
-                        <span>Password</span>
-                        <span className="text-amber-400 text-[8px]">
-                          {isRevealed ? "Plaintext Visible" : "Encrypted Mask"}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1.5 bg-amber-500/10 border border-amber-500/20 rounded-lg px-2.5 py-1.5">
-                        <span className="text-xs font-mono text-amber-200 font-bold flex-1 tracking-wider break-all">
-                          {isRevealed ? (user.password || "—") : "•".repeat(Math.min(user.password?.length || 8, 12))}
-                        </span>
-                        <button
-                          onClick={() => togglePasswordReveal(user.username)}
-                          className="shrink-0 text-amber-400 hover:text-amber-200 transition-colors p-0.5 cursor-pointer"
-                          title={isRevealed ? "Hide password" : "Reveal password"}
-                        >
-                          {isRevealed ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                        </button>
-                        <button
-                          onClick={() => copyToClipboard(user.password || "", copyPassId)}
-                          className="shrink-0 text-muted-foreground hover:text-white transition-colors p-0.5 cursor-pointer"
-                          title="Copy password"
-                        >
-                          {copiedField === copyPassId ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Profile Fields */}
-                    <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-[10px] pt-1">
-                      {(user.firstName || user.lastName) && (
-                        <div>
-                          <span className="text-muted-foreground text-[8px] uppercase block">Full Name</span>
-                          <span className="text-slate-200 font-medium">{user.firstName} {user.lastName}</span>
-                        </div>
-                      )}
-                      {user.phone && (
-                        <div>
-                          <span className="text-muted-foreground text-[8px] uppercase block">Phone</span>
-                          <span className="text-slate-200 font-mono">{user.phone}</span>
-                        </div>
-                      )}
-                      {user.country && (
-                        <div>
-                          <span className="text-muted-foreground text-[8px] uppercase block">Country</span>
-                          <span className="text-slate-200">{user.country}</span>
-                        </div>
-                      )}
-                      {user.currency && (
-                        <div>
-                          <span className="text-muted-foreground text-[8px] uppercase block">Currency</span>
-                          <span className="text-slate-200">{user.currency}</span>
-                        </div>
-                      )}
-                      {user.referralCode && (
-                        <div className="col-span-2">
-                          <span className="text-muted-foreground text-[8px] uppercase block">Referral Code</span>
-                          <span className="text-brand font-mono">{user.referralCode}</span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Joined Date */}
-                    {user.createdAt && (
-                      <div className="text-[8px] text-muted-foreground font-mono pt-1.5 border-t border-white/5">
-                        Registered: {new Date(user.createdAt).toLocaleString()}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </GlassCard>
-      )}
-
-      {/* LOGS TAB VIEW */}
-      {adminTab === "logs" && (
-        <>
-          <GlassCard className="p-3">
-        <div className="flex flex-col md:flex-row items-center gap-3">
-          <div className="relative flex-1 w-full">
-            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-            <input 
-              type="text" 
-              placeholder="Filter by action keyword, user profile, IP address, or location..." 
-              value={searchText}
-              onChange={(e) => setSearchText(e.target.value)}
-              className="w-full bg-white/5 border border-white/10 rounded-lg pl-9 pr-4 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-brand focus:border-brand transition-all text-white placeholder-muted-foreground"
-            />
-            {searchText && (
-              <button 
-                onClick={() => setSearchText("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-white"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </div>
-          
-          <div className="flex items-center gap-2.5 w-full md:w-auto shrink-0">
-            <select 
-              value={selectedCategory} 
-              onChange={(e) => setSelectedCategory(e.target.value)}
-              className="bg-black/40 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-muted-foreground focus:outline-none focus:border-brand w-full sm:w-auto cursor-pointer"
-            >
-              <option value="all">📁 All Folders</option>
-              <option value="trade">Trades</option>
-              <option value="wallet">Wallet Ops</option>
-              <option value="security">Security</option>
-              <option value="system">System Logs</option>
-              <option value="staking">Staking Pools</option>
-              <option value="mining">Mining Power</option>
-              <option value="referrals">Referrals</option>
-              <option value="chat">Chat Lounge</option>
-            </select>
-
-            <select 
-              value={selectedStatus} 
-              onChange={(e) => setSelectedStatus(e.target.value)}
-              className="bg-black/40 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-muted-foreground focus:outline-none focus:border-brand w-full sm:w-auto cursor-pointer"
-            >
-              <option value="all">⚡ All Statuses</option>
-              <option value="success">Success</option>
-              <option value="warning">Warnings</option>
-              <option value="failed">Failed Actions</option>
-            </select>
-
-            {(searchText || selectedCategory !== "all" || selectedStatus !== "all") && (
-              <button 
-                onClick={() => {
-                  setSearchText("");
-                  setSelectedCategory("all");
-                  setSelectedStatus("all");
-                }}
-                className="text-[10px] text-brand hover:text-brand-glow font-bold underline cursor-pointer px-1 shrink-0"
-              >
-                Reset
-              </button>
-            )}
-          </div>
-        </div>
-      </GlassCard>
-
-      {/* CORE SPLIT GRID */}
-      <div className="grid grid-cols-1 lg:grid-cols-10 gap-5 items-start">
-        
-        {/* logs list */}
-        <GlassCard className="lg:col-span-7 p-0 overflow-hidden">
-          <div className="max-h-[550px] overflow-y-auto custom-scrollbar">
-            {filteredLogs.length > 0 ? (
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="border-b border-white/10 bg-black/20 text-muted-foreground text-[10px] font-semibold uppercase tracking-wider sticky top-0 z-10">
-                    <th className="px-4 py-2.5 font-medium">User Profile</th>
-                    <th className="px-4 py-2.5 font-medium">Activity Details</th>
-                    <th className="px-4 py-2.5 font-medium">Category</th>
-                    <th className="px-4 py-2.5 font-medium">Outcome</th>
-                    <th className="px-4 py-2.5 font-medium text-right">Time</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/5 text-xs">
-                  <AnimatePresence initial={false}>
-                    {filteredLogs.map((log) => {
-                      const isSelected = selectedLog?.id === log.id;
-                      
-                      const catColors: Record<string, string> = {
-                        trade: "bg-blue-500/10 text-blue-400 border border-blue-500/20",
-                        wallet: "bg-green-500/10 text-green-400 border border-green-500/20",
-                        security: "bg-red-500/10 text-red-400 border border-red-500/20",
-                        system: "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20",
-                        staking: "bg-pink-500/10 text-pink-400 border border-pink-500/20",
-                        mining: "bg-teal-500/10 text-teal-400 border border-teal-500/20",
-                        "real-estate": "bg-amber-500/10 text-amber-400 border border-amber-500/20",
-                        referrals: "bg-sky-500/10 text-sky-400 border border-sky-500/20",
-                        chat: "bg-purple-500/10 text-purple-400 border border-purple-500/20"
-                      };
-
-                      const statusColors: Record<string, string> = {
-                        success: "text-green-400 bg-green-500/5 border border-green-500/10",
-                        warning: "text-yellow-400 bg-yellow-500/5 border border-yellow-500/10",
-                        failed: "text-red-400 bg-red-500/5 border border-red-500/10"
-                      };
-
-                      const logDate = new Date(log.timestamp);
-                      const timeStr = `${logDate.getHours().toString().padStart(2, '0')}:${logDate.getMinutes().toString().padStart(2, '0')}:${logDate.getSeconds().toString().padStart(2, '0')}`;
-
-                      return (
-                        <motion.tr 
-                          key={log.id} 
-                          layoutId={log.id}
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          exit={{ opacity: 0 }}
-                          transition={{ duration: 0.15 }}
-                          onClick={() => setSelectedLog(isSelected ? null : log)}
-                          className={`cursor-pointer transition-all ${
-                            isSelected 
-                              ? "bg-brand/10 border-l-4 border-brand text-white" 
-                              : "hover:bg-white/5 text-muted-foreground hover:text-foreground"
-                          }`}
-                        >
-                          <td className="px-4 py-3">
-                            <div className="flex items-center gap-2">
-                              <div className="w-7 h-7 rounded-full bg-gradient-to-r from-purple-600 to-brand flex items-center justify-center text-white font-bold text-[10px]">
-                                {log.avatar}
-                              </div>
-                              <div className="min-w-0">
-                                <div className="text-[11px] font-semibold text-white truncate max-w-[100px]">{log.userName}</div>                                <div className="text-[9px] text-muted-foreground">{log.userRole}</div>
-                              </div>
-                            </div>
-                          </td>
-
-                          <td className="px-4 py-3">
-                            <div className="font-medium text-white line-clamp-1 max-w-[220px] lg:max-w-[280px]">
-                              {log.action}
-                            </div>
-                          </td>
-
-                          <td className="px-4 py-3">
-                            <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wide ${catColors[log.category] || "bg-white/5 text-muted-foreground"}`}>
-                              {log.category}
-                            </span>
-                          </td>
-
-                          <td className="px-4 py-3">
-                            <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase ${statusColors[log.status] || "bg-white/5"}`}>
-                              {log.status}
-                            </span>
-                          </td>
-
-                          <td className="px-4 py-3 text-right">
-                            <span className="text-[9px] font-mono text-muted-foreground">{timeStr}</span>
-                          </td>
-                        </motion.tr>
-                      );
-                    })}
-                  </AnimatePresence>
-                </tbody>
-              </table>
-            ) : (
-              <div className="p-12 text-center text-muted-foreground">
-                <HelpCircle className="w-8 h-8 mx-auto text-muted-foreground/20 mb-2" />
-                <div className="text-sm font-semibold">No activity logs found</div>
-                <p className="text-xs mt-1">Try relaxing your search terms or filters.</p>
+      {/* ----------------------------------------------------------------- */}
+      {/* TAB 1: OVERVIEW DASHBOARD */}
+      {/* ----------------------------------------------------------------- */}
+      {activeTab === "dashboard" && (
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+          {/* KPI Metrics */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <GlassCard className="p-5 border-white/10 flex items-center justify-between">
+              <div>
+                <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Total Accounts</p>
+                <p className="text-2xl font-extrabold text-white mt-1">{usersList.length}</p>
+                <p className="text-[11px] text-brand mt-1 flex items-center gap-1">
+                  <UserCheck className="w-3 h-3" /> Registered Users
+                </p>
               </div>
-            )}
-          </div>
-        </GlassCard>
-
-        {/* forensic inspector panel */}
-        <div className="lg:col-span-3">
-          {selectedLog ? (
-            <motion.div
-              initial={{ opacity: 0, y: 15 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="sticky top-6"
-            >
-              <GlassCard className="border-brand/20 p-4 relative overflow-hidden">
-                <div className={`absolute top-0 right-0 w-20 h-20 rounded-full blur-3xl -translate-y-6 translate-x-6 opacity-30 ${
-                  selectedLog.status === 'failed' ? 'bg-red-500' : 'bg-brand'
-                }`}></div>
-
-                <div className="flex items-start justify-between mb-4 relative z-10">
-                  <div className="flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-brand" />
-                    <div>
-                      <h3 className="text-sm font-bold text-white">Log Forensics</h3>
-                      <div className="text-[8px] font-mono text-muted-foreground">UUID: {selectedLog.id}</div>
-                    </div>
-                  </div>
-                  <button 
-                    onClick={() => setSelectedLog(null)}
-                    className="p-1 hover:bg-white/5 rounded-full text-muted-foreground hover:text-white"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-
-                <div className="space-y-3.5 text-xs relative z-10">
-                  
-                  <div className="p-2.5 bg-black/40 border border-white/5 rounded-lg space-y-1">
-                    <div className="text-muted-foreground text-[8px] uppercase tracking-wider font-semibold">User Identity</div>
-                    <div className="font-semibold text-white truncate">{selectedLog.userName} ({selectedLog.userEmail})</div>                    <div className="text-[10px] text-muted-foreground">System Role: <span className="text-brand font-medium">{selectedLog.userRole}</span></div>
-                  </div>
-
-                  <div className="p-2.5 bg-black/40 border border-white/5 rounded-lg space-y-1">
-                    <div className="text-muted-foreground text-[8px] uppercase tracking-wider font-semibold">Action narrative</div>
-                    <div className="text-[11px] font-medium text-white leading-relaxed">{selectedLog.action}</div>
-                  </div>
-
-                  <div className="p-2.5 bg-black/40 border border-white/5 rounded-lg space-y-2">
-                    <div className="text-muted-foreground text-[8px] uppercase tracking-wider font-semibold">Network & Source</div>
-                    
-                    <div className="grid grid-cols-2 gap-y-1.5 font-mono text-[9px]">
-                      <div>
-                        <span className="text-muted-foreground block text-[7px] uppercase">IP ADDRESS</span>
-                        <span className="text-white font-bold">{selectedLog.ipAddress}</span>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground block text-[7px] uppercase">GEO LOCATION</span>
-                        <span className="text-white font-bold flex items-center gap-0.5">
-                          <MapPin className="w-2.5 h-2.5 text-brand" /> {selectedLog.location}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="pt-1.5 border-t border-white/5 text-[9px] font-mono leading-relaxed text-muted-foreground">
-                      <span className="block text-[7px] uppercase font-bold tracking-wider mb-0.5">Device Browser Agent</span>
-                      <div className="bg-black/60 p-1.5 rounded border border-white/5 break-all text-white">
-                        {selectedLog.browser}
-                      </div>
-                    </div>
-                  </div>
-
-                  {selectedLog.details && (
-                    <div className="space-y-1">
-                      <div className="text-muted-foreground text-[8px] uppercase tracking-wider font-semibold">Activity Parameters (Payload)</div>
-                      <pre className="text-[9px] font-mono bg-black/75 p-2 rounded-lg border border-white/10 overflow-x-auto text-brand-glow max-h-[120px] custom-scrollbar">
-                        {JSON.stringify(selectedLog.details, null, 2)}
-                      </pre>
-                    </div>
-                  )}
-
-                  <div className="text-[8px] font-mono text-muted-foreground text-center pt-2 border-t border-white/5">
-                    GMT TIMESTAMP: {new Date(selectedLog.timestamp).toUTCString()}
-                  </div>
-
-                </div>
-              </GlassCard>
-            </motion.div>
-          ) : (
-            <GlassCard className="p-6 text-center text-muted-foreground border-dashed border-white/10 bg-transparent flex flex-col justify-center items-center h-[280px]">
-              <HelpCircle className="w-8 h-8 text-muted-foreground/20 mb-2" />
-              <h3 className="text-xs font-semibold text-white">Inspect Details</h3>
-              <p className="text-[10px] text-muted-foreground mt-1 max-w-[170px] leading-relaxed">
-                Click any activity row in the live feed to audit user geographics, browser agents, network parameters, and payload parameters.
-              </p>
+              <div className="w-12 h-12 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-brand">
+                <Users className="w-6 h-6" />
+              </div>
             </GlassCard>
-          )}
-        </div>
 
-      </div>
-      </>
-      )}
+            <GlassCard className="p-5 border-white/10 flex items-center justify-between">
+              <div>
+                <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Total System Balance</p>
+                <p className="text-2xl font-extrabold text-white mt-1">${totalBalanceAllUsers.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                <p className="text-[11px] text-emerald-400 mt-1 flex items-center gap-1">
+                  <DollarSign className="w-3 h-3" /> Simulated Vault
+                </p>
+              </div>
+              <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+                <Wallet className="w-6 h-6" />
+              </div>
+            </GlassCard>
 
-      {/* SUPPORT TAB VIEW */}
-      {adminTab === "support" && (
-        <div className="grid grid-cols-1 lg:grid-cols-10 gap-5 items-stretch h-[580px]">
-          {/* User List */}
-          <GlassCard className="lg:col-span-3 p-0 flex flex-col overflow-hidden bg-black/45 border border-white/5">
-            <div className="p-3 border-b border-white/5 font-bold text-xs uppercase tracking-wider text-muted-foreground bg-black/25">
-              Active Support Chats
-            </div>
-            <div className="flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar">
-              {supportChats.length === 0 ? (
-                <div className="text-center py-12 text-xs text-muted-foreground">
-                  No active support chats yet
+            <GlassCard className="p-5 border-white/10 flex items-center justify-between">
+              <div>
+                <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">User Submissions</p>
+                <p className="text-2xl font-extrabold text-white mt-1">{submissionsList.length}</p>
+                <p className="text-[11px] text-amber-400 mt-1 flex items-center gap-1">
+                  <Clock className="w-3 h-3" /> {pendingSubmissionsCount} Pending Review
+                </p>
+              </div>
+              <div className="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+                <ArrowUpRight className="w-6 h-6" />
+              </div>
+            </GlassCard>
+
+            <GlassCard className="p-5 border-white/10 flex items-center justify-between">
+              <div>
+                <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Active Support Chats</p>
+                <p className="text-2xl font-extrabold text-white mt-1">{supportChats.length}</p>
+                <p className="text-[11px] text-purple-400 mt-1 flex items-center gap-1">
+                  <MessageSquare className="w-3 h-3" /> Real-time Support
+                </p>
+              </div>
+              <div className="w-12 h-12 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400">
+                <MessageSquare className="w-6 h-6" />
+              </div>
+            </GlassCard>
+          </div>
+
+          {/* Quick Actions & Recent User Submissions */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Quick Balance Adjustment widget */}
+            <GlassCard className="p-6 border-white/10 lg:col-span-1 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <DollarSign className="w-5 h-5 text-brand" />
+                  <h3 className="text-base font-bold text-white">Quick Fund / Deduct</h3>
+                </div>
+                <p className="text-xs text-muted-foreground mb-4">
+                  Select an account to add or deduct simulated numbers in seconds.
+                </p>
+
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-[11px] font-medium text-muted-foreground block mb-1">Target Account</label>
+                    <select
+                      value={balanceUser}
+                      onChange={(e) => setBalanceUser(e.target.value)}
+                      className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-brand"
+                    >
+                      {usersList.map((u) => (
+                        <option key={u.username} value={u.username}>
+                          {u.username} ({u.email}) - Current: ${u.realBalance?.toLocaleString()}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => triggerBalanceForUser(balanceUser, "add")}
+                      className="py-2.5 px-3 bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-400 rounded-lg font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                    >
+                      <PlusCircle className="w-4 h-4" /> Add Money
+                    </button>
+                    <button
+                      onClick={() => triggerBalanceForUser(balanceUser, "deduct")}
+                      className="py-2.5 px-3 bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-red-400 rounded-lg font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                    >
+                      <MinusCircle className="w-4 h-4" /> Deduct Money
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-6 pt-4 border-t border-white/5 flex items-center justify-between text-xs text-muted-foreground">
+                <span>Total Registered Accounts:</span>
+                <span className="font-bold text-white">{usersList.length}</span>
+              </div>
+            </GlassCard>
+
+            {/* Recent Submissions preview */}
+            <GlassCard className="p-6 border-white/10 lg:col-span-2">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <ArrowUpRight className="w-5 h-5 text-amber-400" />
+                  <h3 className="text-base font-bold text-white">Recent Deposits & Withdrawals</h3>
+                </div>
+                <button
+                  onClick={() => setActiveTab("submissions")}
+                  className="text-xs text-brand hover:underline font-medium flex items-center gap-1"
+                >
+                  View all ({submissionsList.length}) <ChevronRight className="w-3 h-3" />
+                </button>
+              </div>
+
+              {submissionsList.length === 0 ? (
+                <div className="py-12 text-center text-muted-foreground text-xs">
+                  No deposits or withdrawal submissions recorded yet.
                 </div>
               ) : (
-                supportChats.map((chat) => {
-                  const isActive = activeAdminChatId === chat.id;
-                  const lastMessage = chat.messages[chat.messages.length - 1];
-                  return (
-                    <div
-                      key={chat.id}
-                      onClick={() => setActiveAdminChatId(chat.id)}
-                      className={`p-3 rounded-lg cursor-pointer flex items-center gap-3 transition-colors ${
-                        isActive ? "bg-white/10" : "hover:bg-white/5"
-                      }`}
-                    >
-                      <div className="relative">
-                        <div className={`w-9 h-9 rounded-full bg-gradient-to-tr ${chat.color || 'from-gray-600 to-gray-400'} flex items-center justify-center text-white font-bold text-xs shadow-inner`}>
-                          {chat.avatar}
-                        </div>
-                        {chat.status === "Online" && (
-                          <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-[#0c0f16]"></div>
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex justify-between items-center mb-0.5">
-                          <h3 className="text-white font-bold truncate text-xs">{chat.name}</h3>
-                          <span className="text-[9px] text-muted-foreground font-mono">{lastMessage ? lastMessage.time : ""}</span>
-                        </div>
-                        <p className="text-[10px] text-muted-foreground truncate">{lastMessage ? lastMessage.text : "No messages"}</p>
-                      </div>
-                    </div>
-                  );
-                })
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr className="border-b border-white/5 text-muted-foreground font-semibold">
+                        <th className="pb-2">Type</th>
+                        <th className="pb-2">User</th>
+                        <th className="pb-2">Method & Details</th>
+                        <th className="pb-2">Amount</th>
+                        <th className="pb-2">Status</th>
+                        <th className="pb-2 text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5 text-slate-200">
+                      {submissionsList.slice(0, 5).map((sub) => (
+                        <tr key={sub.id} className="hover:bg-white/5 transition-colors">
+                          <td className="py-2.5">
+                            <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
+                              sub.type === "deposit" ? "bg-emerald-500/20 text-emerald-400" : "bg-purple-500/20 text-purple-400"
+                            }`}>
+                              {sub.type?.toUpperCase()}
+                            </span>
+                          </td>
+                          <td className="py-2.5 font-medium text-white">{sub.username}</td>
+                          <td className="py-2.5 text-muted-foreground">
+                            {sub.method} • <span className="font-mono text-[11px]">{sub.reference}</span>
+                          </td>
+                          <td className="py-2.5 font-bold text-white">{sub.totalUsd || sub.amountVal}</td>
+                          <td className="py-2.5">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
+                              sub.status === "Approved" ? "bg-emerald-500/20 text-emerald-400" :
+                              sub.status === "Cancelled" ? "bg-red-500/20 text-red-400" :
+                              "bg-amber-500/20 text-amber-400"
+                            }`}>
+                              {sub.status}
+                            </span>
+                          </td>
+                          <td className="py-2.5 text-right">
+                            <button
+                              onClick={() => { setInspectSubmission(sub); setActiveTab("submissions"); }}
+                              className="px-2 py-1 bg-white/10 hover:bg-white/20 text-white rounded text-[11px] transition-colors"
+                            >
+                              Inspect
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
-            </div>
-          </GlassCard>
-
-          {/* Active Chat Message Thread */}
-          <GlassCard className="lg:col-span-7 p-0 flex flex-col justify-between bg-black/45 border border-white/5">
-            {activeAdminChatId ? (
-              (() => {
-                const activeChat = supportChats.find(c => c.id === activeAdminChatId);
-                if (!activeChat) return <div className="flex-1 flex items-center justify-center text-xs text-muted-foreground">Select a chat to begin support.</div>;
-                return (
-                  <>
-                    {/* Header */}
-                    <div className="p-3 border-b border-white/5 flex items-center gap-2 bg-black/20">
-                      <div className={`w-7 h-7 rounded-full bg-gradient-to-tr ${activeChat.color || 'from-gray-600 to-gray-400'} flex items-center justify-center text-white font-bold text-xs`}>
-                        {activeChat.avatar}
-                      </div>
-                      <div>
-                        <div className="text-xs font-bold text-white leading-tight">{activeChat.name}</div>
-                        <div className="text-[9px] text-green-500">Active Session ({activeChat.status})</div>
-                      </div>
-                    </div>
-
-                    {/* Messages */}
-                    <div className="flex-1 overflow-y-auto p-4 space-y-3.5 custom-scrollbar">
-                      {activeChat.messages.map((msg: any) => {
-                        const isMe = msg.senderType === "admin";
-                        return (
-                          <div key={msg.id} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
-                            <div className="flex items-end gap-1.5 max-w-[80%]">
-                              {!isMe && (
-                                <div className={`w-6 h-6 rounded-full bg-gradient-to-tr ${activeChat.color} flex items-center justify-center text-white text-[9px] font-bold shrink-0 mb-0.5`}>
-                                  {activeChat.avatar}
-                                </div>
-                              )}
-                              <div className={`p-3 rounded-xl text-xs ${
-                                isMe 
-                                   ? 'bg-brand text-white rounded-br-sm shadow-sm' 
-                                  : 'bg-black/35 text-white rounded-bl-sm border border-white/5'
-                              }`}>
-                                {msg.text}
-                              </div>
-                            </div>
-                            <span className="text-[8px] text-muted-foreground mt-0.5 mx-8 font-mono">{msg.time}</span>
-                          </div>
-                        );
-                      })}
-                      <div ref={adminChatEndRef} />
-                    </div>
-
-                    {/* Input */}
-                    <div className="p-3 border-t border-white/5 bg-black/20 flex gap-2">
-                      <input
-                        type="text"
-                        placeholder="Type a support reply..."
-                        value={adminReplyInput}
-                        onChange={(e) => setAdminReplyInput(e.target.value)}
-                        onKeyDown={(e) => e.key === "Enter" && handleAdminSendMessage()}
-                        className="flex-1 bg-black/40 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-brand"
-                      />
-                      <button
-                        onClick={handleAdminSendMessage}
-                        className="px-4 py-1.5 bg-brand hover:bg-brand/90 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer"
-                      >
-                        Reply
-                      </button>
-                    </div>
-                  </>
-                );
-              })()
-            ) : (
-              <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground text-xs py-12">
-                <HelpCircle className="w-8 h-8 text-muted-foreground/20 mb-2" />
-                Select a user chat from the list to begin live support.
-              </div>
-            )}
-          </GlassCard>
-        </div>
+            </GlassCard>
+          </div>
+        </motion.div>
       )}
 
-      {/* ACCOUNTS TAB VIEW */}
-      {adminTab === "accounts" && (
-        <GlassCard className="p-5 border border-amber-500/20 bg-amber-500/5 space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <Users className="w-4 h-4 text-amber-400" />
-              <h2 className="text-sm font-bold text-white">All Registered User Accounts & Passwords</h2>
-              <span className="text-[10px] bg-amber-500/10 border border-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded font-semibold">
-                {filteredAccounts.length} / {credentialsList.length} account{credentialsList.length !== 1 ? "s" : ""}
-              </span>
+      {/* ----------------------------------------------------------------- */}
+      {/* TAB 2: ALL ACCOUNTS (Usernames, Passwords, Emails, Details) */}
+      {/* ----------------------------------------------------------------- */}
+      {activeTab === "accounts" && (
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+            <div>
+              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                <Users className="w-5 h-5 text-brand" /> Registered Accounts ({usersList.length})
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                All user accounts, passwords, contact information, and balances.
+              </p>
             </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setRevealAllPasswords(!revealAllPasswords)}
-                className="text-[10px] px-2.5 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20 rounded font-semibold transition-colors flex items-center gap-1 cursor-pointer"
-              >
-                {revealAllPasswords ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
-                {revealAllPasswords ? "Hide Passwords" : "Reveal All Passwords"}
-              </button>
-              <button
-                onClick={fetchCredentials}
-                disabled={loadingCredentials}
-                className="text-[10px] text-muted-foreground hover:text-white flex items-center gap-1 transition-colors disabled:opacity-50 cursor-pointer"
-              >
-                <RefreshCw className={`w-3 h-3 ${loadingCredentials ? "animate-spin" : ""}`} />
-                Refresh
-              </button>
-            </div>
-          </div>
 
-          {/* Quick Filter */}
-          <div className="relative w-full">
-            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-            <input
-              type="text"
-              placeholder="Filter accounts by username, email, phone, name, country, referral code..."
-              value={accountSearchText}
-              onChange={(e) => setAccountSearchText(e.target.value)}
-              className="w-full bg-black/40 border border-white/10 rounded-lg pl-9 pr-4 py-2 text-xs text-white placeholder-muted-foreground focus:outline-none focus:border-amber-400"
-            />
-          </div>
-
-          {loadingCredentials ? (
-            <div className="flex items-center justify-center py-8 text-muted-foreground text-xs gap-2">
-              <RefreshCw className="w-4 h-4 animate-spin" /> Loading accounts...
-            </div>
-          ) : filteredAccounts.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground text-xs">
-              No registered user accounts found matching query.
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5">
-              {filteredAccounts.map((user: any) => {
-                const isRevealed = revealAllPasswords || revealedPasswords.has(user.username);
-                const copyUserId = `u-${user.username}`;
-                const copyPassId = `p-${user.username}`;
-                const copyEmailId = `e-${user.username}`;
-                return (
-                  <div
-                    key={user.username}
-                    className="bg-black/50 border border-white/10 rounded-xl p-4 space-y-3 hover:border-amber-500/40 transition-colors shadow-lg"
-                  >
-                    {/* Header */}
-                    <div className="flex items-center justify-between gap-2 border-b border-white/5 pb-2">
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <div className="w-9 h-9 rounded-full bg-gradient-to-br from-amber-500/40 to-orange-500/40 border border-amber-500/30 flex items-center justify-center text-amber-300 font-extrabold text-xs shrink-0">
-                          {user.avatar || user.username.substring(0, 2).toUpperCase()}
-                        </div>
-                        <div className="min-w-0">
-                          <div className="text-xs font-bold text-white truncate">{user.username}</div>
-                          <span className={`text-[9px] font-bold uppercase px-1.5 py-0.2 rounded ${
-                            user.role === "Administrator" ? "bg-red-500/10 text-red-400 border border-red-500/20" : "bg-brand/10 text-brand border border-brand/20"
-                          }`}>
-                            {user.role}
-                          </span>
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => copyToClipboard(user.username, copyUserId)}
-                        title="Copy Username"
-                        className="text-muted-foreground hover:text-white p-1 text-[10px]"
-                      >
-                        {copiedField === copyUserId ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
-                      </button>
-                    </div>
-
-                    {/* Email */}
-                    <div className="space-y-1">
-                      <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold">Email Address</div>
-                      <div className="flex items-center gap-1.5 bg-black/40 p-2 rounded-lg border border-white/5">
-                        <span className="text-xs text-slate-200 truncate flex-1 font-mono">{user.email}</span>
-                        <button
-                          onClick={() => copyToClipboard(user.email, copyEmailId)}
-                          className="shrink-0 text-muted-foreground hover:text-white p-0.5"
-                          title="Copy email"
-                        >
-                          {copiedField === copyEmailId ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Password */}
-                    <div className="space-y-1">
-                      <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold flex justify-between">
-                        <span>Password</span>
-                        <span className="text-amber-400 text-[8px]">
-                          {isRevealed ? "Plaintext Visible" : "Encrypted Mask"}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1.5 bg-amber-500/10 border border-amber-500/20 rounded-lg px-2.5 py-1.5">
-                        <span className="text-xs font-mono text-amber-200 font-bold flex-1 tracking-wider break-all">
-                          {isRevealed ? (user.password || "—") : "•".repeat(Math.min(user.password?.length || 8, 12))}
-                        </span>
-                        <button
-                          onClick={() => togglePasswordReveal(user.username)}
-                          className="shrink-0 text-amber-400 hover:text-amber-200 transition-colors p-0.5 cursor-pointer"
-                          title={isRevealed ? "Hide password" : "Reveal password"}
-                        >
-                          {isRevealed ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                        </button>
-                        <button
-                          onClick={() => copyToClipboard(user.password || "", copyPassId)}
-                          className="shrink-0 text-muted-foreground hover:text-white transition-colors p-0.5 cursor-pointer"
-                          title="Copy password"
-                        >
-                          {copiedField === copyPassId ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Profile Attributes */}
-                    <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-[10px] pt-1">
-                      {(user.firstName || user.lastName) && (
-                        <div>
-                          <span className="text-muted-foreground text-[8px] uppercase block">Full Name</span>
-                          <span className="text-slate-200 font-medium">{user.firstName} {user.lastName}</span>
-                        </div>
-                      )}
-                      {user.phone && (
-                        <div>
-                          <span className="text-muted-foreground text-[8px] uppercase block">Phone</span>
-                          <span className="text-slate-200 font-mono">{user.phone}</span>
-                        </div>
-                      )}
-                      {user.country && (
-                        <div>
-                          <span className="text-muted-foreground text-[8px] uppercase block">Country</span>
-                          <span className="text-slate-200">{user.country}</span>
-                        </div>
-                      )}
-                      {user.currency && (
-                        <div>
-                          <span className="text-muted-foreground text-[8px] uppercase block">Currency</span>
-                          <span className="text-slate-200">{user.currency}</span>
-                        </div>
-                      )}
-                      {user.referralCode && (
-                        <div className="col-span-2">
-                          <span className="text-muted-foreground text-[8px] uppercase block">Referral Code</span>
-                          <span className="text-brand font-mono">{user.referralCode}</span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Registration Date */}
-                    {user.createdAt && (
-                      <div className="text-[8px] text-muted-foreground font-mono pt-1.5 border-t border-white/5">
-                        Registered: {new Date(user.createdAt).toLocaleString()}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </GlassCard>
-      )}
-
-      {/* SUBMISSIONS TAB VIEW */}
-      {adminTab === "submissions" && (
-        <GlassCard className="p-5 border border-green-500/20 bg-green-500/5 space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <FileText className="w-4 h-4 text-green-400" />
-              <h2 className="text-sm font-bold text-white">All Deposit & Withdrawal Submissions</h2>
-              <span className="text-[10px] bg-green-500/10 border border-green-500/20 text-green-400 px-1.5 py-0.5 rounded font-semibold">
-                {filteredSubmissions.length} / {submissionsList.length} submission{submissionsList.length !== 1 ? "s" : ""}
-              </span>
-            </div>
-            <button
-              onClick={fetchCredentials}
-              disabled={loadingCredentials}
-              className="text-[10px] text-muted-foreground hover:text-white flex items-center gap-1 transition-colors disabled:opacity-50 cursor-pointer"
-            >
-              <RefreshCw className={`w-3 h-3 ${loadingCredentials ? "animate-spin" : ""}`} />
-              Refresh
-            </button>
-          </div>
-
-          {/* Submissions Filter Toolbar */}
-          <div className="flex flex-col sm:flex-row items-center gap-3">
-            <div className="relative flex-1 w-full">
+            <div className="relative w-full sm:w-72">
               <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <input
                 type="text"
-                placeholder="Filter submissions by user, email, reference, payment method..."
-                value={submissionSearchText}
-                onChange={(e) => setSubmissionSearchText(e.target.value)}
-                className="w-full bg-black/40 border border-white/10 rounded-lg pl-9 pr-4 py-1.5 text-xs text-white placeholder-muted-foreground focus:outline-none focus:border-green-400"
+                placeholder="Search username, email, phone, country..."
+                value={accountSearch}
+                onChange={(e) => setAccountSearch(e.target.value)}
+                className="w-full bg-black/40 border border-white/10 rounded-lg pl-9 pr-3 py-1.5 text-xs text-white placeholder-muted-foreground focus:outline-none focus:border-brand"
               />
-            </div>
-            <div className="flex gap-1.5 bg-black/40 p-1 rounded-lg border border-white/10 text-xs">
-              {(["all", "deposit", "withdraw"] as const).map((t) => (
-                <button
-                  key={t}
-                  onClick={() => setSubmissionFilterType(t)}
-                  className={`px-3 py-1 rounded font-semibold transition-all capitalize cursor-pointer ${
-                    submissionFilterType === t
-                      ? "bg-green-500 text-black font-bold shadow-sm"
-                      : "text-muted-foreground hover:text-white"
-                  }`}
-                >
-                  {t === "all" ? "All Submissions" : `${t}s`}
-                </button>
-              ))}
             </div>
           </div>
 
-          {loadingCredentials ? (
-            <div className="flex items-center justify-center py-8 text-muted-foreground text-xs gap-2">
-              <RefreshCw className="w-4 h-4 animate-spin" /> Loading submissions...
-            </div>
-          ) : filteredSubmissions.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground text-xs">
-              No deposit or withdrawal submissions found matching query.
-            </div>
-          ) : (
+          <GlassCard className="p-0 border-white/10 overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs">
-                <thead>
-                  <tr className="border-b border-white/10 text-muted-foreground text-[10px] uppercase tracking-wider bg-black/20">
-                    <th className="px-3 py-2.5">Type</th>
-                    <th className="px-3 py-2.5">User</th>
-                    <th className="px-3 py-2.5">Email</th>
-                    <th className="px-3 py-2.5">Reference</th>
-                    <th className="px-3 py-2.5">Method</th>
-                    <th className="px-3 py-2.5">Amount</th>
-                    <th className="px-3 py-2.5">USD Value</th>
-                    <th className="px-3 py-2.5">Status</th>
-                    <th className="px-3 py-2.5">Details (Payload)</th>
-                    <th className="px-3 py-2.5">Submitted</th>
+              <table className="w-full text-left text-xs">
+                <thead className="bg-black/60 border-b border-white/10 text-muted-foreground font-semibold uppercase tracking-wider text-[10px]">
+                  <tr>
+                    <th className="px-4 py-3">User & Email</th>
+                    <th className="px-4 py-3">Password</th>
+                    <th className="px-4 py-3">Phone & Country</th>
+                    <th className="px-4 py-3">Real USD Balance</th>
+                    <th className="px-4 py-3">Crypto (BTC/USDT)</th>
+                    <th className="px-4 py-3">Role</th>
+                    <th className="px-4 py-3 text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-white/5">
-                  {filteredSubmissions.map((sub: any) => (
-                    <tr key={sub.id} className="hover:bg-white/5 transition-colors">
-                      <td className="px-3 py-2.5">
-                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${sub.type === "deposit" ? "bg-green-500/10 text-green-400 border border-green-500/20" : "bg-orange-500/10 text-orange-400 border border-orange-500/20"}`}>
-                          {sub.type}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2.5 font-semibold text-white">{sub.username}</td>
-                      <td className="px-3 py-2.5 text-slate-300 font-mono text-[10px]">{sub.email}</td>
-                      <td className="px-3 py-2.5 font-mono text-brand font-bold">{sub.reference}</td>
-                      <td className="px-3 py-2.5">{sub.method}</td>
-                      <td className="px-3 py-2.5 font-mono">{sub.amountVal} {sub.amountAsset}</td>
-                      <td className="px-3 py-2.5 font-mono text-white font-bold">{sub.totalUsd}</td>
-                      <td className="px-3 py-2.5">
-                        <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${
-                          sub.status === "Approved" ? "bg-green-500/10 text-green-400 border border-green-500/20" :
-                          sub.status === "Cancelled" ? "bg-red-500/10 text-red-400 border border-red-500/20" :
-                          "bg-yellow-500/10 text-yellow-400 border border-yellow-500/20"
-                        }`}>{sub.status}</span>
-                      </td>
-                      <td className="px-3 py-2.5 max-w-[220px]">
-                        {sub.details && Object.keys(sub.details).length > 0 ? (
-                          <pre className="text-[9px] font-mono text-muted-foreground overflow-x-auto max-h-20 custom-scrollbar whitespace-pre-wrap bg-black/40 p-1.5 rounded border border-white/5">
-                            {JSON.stringify(sub.details, null, 1)}
-                          </pre>
-                        ) : (
-                          <span className="text-muted-foreground text-[10px]">—</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2.5 text-[10px] text-muted-foreground font-mono whitespace-nowrap">
-                        {sub.createdAt ? new Date(sub.createdAt).toLocaleString() : "—"}
+                <tbody className="divide-y divide-white/5 text-slate-200">
+                  {filteredUsers.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="text-center py-12 text-muted-foreground text-xs">
+                        No accounts matching search criteria.
                       </td>
                     </tr>
-                  ))}
+                  ) : (
+                    filteredUsers.map((u) => {
+                      const isRevealed = revealedPasswords.has(u.username);
+                      return (
+                        <tr key={u.username} className="hover:bg-white/[0.03] transition-colors">
+                          {/* User Info */}
+                          <td className="px-4 py-3.5">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-full bg-brand/20 border border-brand/30 flex items-center justify-center text-brand font-bold text-xs">
+                                {u.avatar || u.username.substring(0, 2).toUpperCase()}
+                              </div>
+                              <div>
+                                <div className="font-bold text-white flex items-center gap-1.5">
+                                  <span>{u.username}</span>
+                                  {u.firstName && (
+                                    <span className="text-[11px] text-muted-foreground font-normal">
+                                      ({u.firstName} {u.lastName})
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-[11px] text-muted-foreground font-mono flex items-center gap-1">
+                                  <span>{u.email}</span>
+                                  <button
+                                    onClick={() => copyText(u.email, `email-${u.username}`)}
+                                    title="Copy email"
+                                    className="hover:text-white"
+                                  >
+                                    {copiedField === `email-${u.username}` ? (
+                                      <Check className="w-3 h-3 text-emerald-400" />
+                                    ) : (
+                                      <Copy className="w-3 h-3 opacity-60 hover:opacity-100" />
+                                    )}
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* Password */}
+                          <td className="px-4 py-3.5">
+                            <div className="flex items-center gap-1.5 bg-black/40 px-2.5 py-1 rounded-md border border-white/5 w-fit">
+                              <span className="font-mono text-xs text-amber-300">
+                                {isRevealed ? (u.password || "(empty)") : "••••••••"}
+                              </span>
+                              <button
+                                onClick={() => togglePassword(u.username)}
+                                title={isRevealed ? "Hide password" : "Show password"}
+                                className="text-muted-foreground hover:text-white ml-1"
+                              >
+                                {isRevealed ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                              </button>
+                              <button
+                                onClick={() => copyText(u.password, `pass-${u.username}`)}
+                                title="Copy password"
+                                className="text-muted-foreground hover:text-white"
+                              >
+                                {copiedField === `pass-${u.username}` ? (
+                                  <Check className="w-3 h-3 text-emerald-400" />
+                                ) : (
+                                  <Copy className="w-3 h-3 opacity-60 hover:opacity-100" />
+                                )}
+                              </button>
+                            </div>
+                          </td>
+
+                          {/* Phone & Country */}
+                          <td className="px-4 py-3.5">
+                            <div className="text-[11px] text-white">
+                              {u.phone || <span className="text-muted-foreground italic">No phone</span>}
+                            </div>
+                            <div className="text-[10px] text-muted-foreground">
+                              {u.country || "Not specified"} • {u.currency || "USD"}
+                            </div>
+                          </td>
+
+                          {/* Real Balance */}
+                          <td className="px-4 py-3.5">
+                            <span className="font-bold text-emerald-400 text-sm">
+                              ${(u.realBalance || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
+                          </td>
+
+                          {/* Crypto Balances */}
+                          <td className="px-4 py-3.5">
+                            <div className="text-[11px] text-white">
+                              ₿ {(u.btcBalance || 0).toFixed(4)} BTC
+                            </div>
+                            <div className="text-[10px] text-muted-foreground">
+                              ${(u.usdtBalance || 0).toLocaleString()} USDT
+                            </div>
+                          </td>
+
+                          {/* Role */}
+                          <td className="px-4 py-3.5">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                              u.role === "Administrator" ? "bg-purple-500/20 text-purple-300 border border-purple-500/30" : "bg-white/10 text-slate-300"
+                            }`}>
+                              {u.role}
+                            </span>
+                          </td>
+
+                          {/* Actions */}
+                          <td className="px-4 py-3.5 text-right">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                onClick={() => triggerBalanceForUser(u.username, "add")}
+                                title="Add/Deduct balance"
+                                className="px-2 py-1 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/30 rounded font-semibold text-[11px] flex items-center gap-1 transition-all cursor-pointer"
+                              >
+                                <DollarSign className="w-3 h-3" /> Fund
+                              </button>
+
+                              <button
+                                onClick={() => setInspectUser(u)}
+                                title="View full user details & submissions"
+                                className="px-2 py-1 bg-white/10 hover:bg-white/20 text-white rounded text-[11px] transition-all cursor-pointer"
+                              >
+                                Details
+                              </button>
+
+                              {u.username.toLowerCase() !== activeAdmin?.username.toLowerCase() && (
+                                <button
+                                  onClick={() => handleDeleteUser(u.username)}
+                                  title="Delete user"
+                                  className="p-1 hover:bg-red-500/20 text-red-400 rounded transition-colors"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
                 </tbody>
               </table>
             </div>
-          )}
-        </GlassCard>
+          </GlassCard>
+        </motion.div>
       )}
+
+      {/* ----------------------------------------------------------------- */}
+      {/* TAB 3: ADD / DEDUCT FUNDS (Balance Control Manager) */}
+      {/* ----------------------------------------------------------------- */}
+      {activeTab === "balance" && (
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="max-w-2xl mx-auto space-y-6">
+          <div>
+            <h2 className="text-xl font-bold text-white flex items-center gap-2">
+              <DollarSign className="w-6 h-6 text-brand" /> Add or Deduct Account Funds
+            </h2>
+            <p className="text-xs text-muted-foreground mt-1">
+              Select any user account to add, deduct, or set numerical simulation funds. Updates sync instantly.
+            </p>
+          </div>
+
+          <GlassCard className="p-6 border-white/10 shadow-xl">
+            {balanceSuccessMsg && (
+              <div className="p-4 mb-6 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs flex items-center gap-3">
+                <CheckCircle2 className="w-5 h-5 shrink-0" />
+                <span className="font-semibold">{balanceSuccessMsg}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleBalanceSubmit} className="space-y-5">
+              {/* Account Selector */}
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground block mb-1.5">
+                  Select User Account
+                </label>
+                <select
+                  required
+                  value={balanceUser}
+                  onChange={(e) => setBalanceUser(e.target.value)}
+                  className="w-full bg-black/50 border border-white/15 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-brand font-medium"
+                >
+                  <option value="" disabled>-- Select an account --</option>
+                  {usersList.map((u) => (
+                    <option key={u.username} value={u.username}>
+                      {u.username} ({u.email}) — Real Balance: ${u.realBalance?.toLocaleString()}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Current Balances Card */}
+              {selectedBalanceUserObj && (
+                <div className="p-4 rounded-xl bg-black/40 border border-white/5 grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+                  <div>
+                    <span className="text-[10px] text-muted-foreground block uppercase">Real USD</span>
+                    <span className="font-bold text-emerald-400 text-sm">
+                      ${selectedBalanceUserObj.realBalance?.toLocaleString()}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-muted-foreground block uppercase">USDT</span>
+                    <span className="font-bold text-white text-sm">
+                      ${selectedBalanceUserObj.usdtBalance?.toLocaleString()}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-muted-foreground block uppercase">Bitcoin</span>
+                    <span className="font-bold text-amber-400 text-sm">
+                      ₿ {selectedBalanceUserObj.btcBalance?.toFixed(4)}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-muted-foreground block uppercase">Demo USD</span>
+                    <span className="font-bold text-blue-400 text-sm">
+                      ${selectedBalanceUserObj.demoBalance?.toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Action Type: Add / Deduct / Set */}
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground block mb-1.5">
+                  Operation
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setBalanceOperation("add")}
+                    className={`py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
+                      balanceOperation === "add"
+                        ? "bg-emerald-500/20 border-emerald-500/50 text-emerald-400 shadow"
+                        : "bg-black/30 border-white/10 text-muted-foreground hover:text-white"
+                    }`}
+                  >
+                    <PlusCircle className="w-4 h-4" /> Add (+)
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setBalanceOperation("deduct")}
+                    className={`py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
+                      balanceOperation === "deduct"
+                        ? "bg-red-500/20 border-red-500/50 text-red-400 shadow"
+                        : "bg-black/30 border-white/10 text-muted-foreground hover:text-white"
+                    }`}
+                  >
+                    <MinusCircle className="w-4 h-4" /> Deduct (-)
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setBalanceOperation("set")}
+                    className={`py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
+                      balanceOperation === "set"
+                        ? "bg-brand/20 border-brand/50 text-brand shadow"
+                        : "bg-black/30 border-white/10 text-muted-foreground hover:text-white"
+                    }`}
+                  >
+                    <Settings className="w-4 h-4" /> Set Exact (=)
+                  </button>
+                </div>
+              </div>
+
+              {/* Asset Wallet to Adjust */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground block mb-1.5">
+                    Asset / Wallet
+                  </label>
+                  <select
+                    value={balanceAsset}
+                    onChange={(e) => setBalanceAsset(e.target.value as any)}
+                    className="w-full bg-black/50 border border-white/15 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-brand"
+                  >
+                    <option value="realBalance">Real USD Balance ($)</option>
+                    <option value="usdtBalance">USDT ($)</option>
+                    <option value="btcBalance">Bitcoin (BTC ₿)</option>
+                    <option value="demoBalance">Demo Balance ($)</option>
+                    <option value="stakedBalance">Staked Vault ($)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground block mb-1.5">
+                    Amount (Numerical value)
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="any"
+                      required
+                      min="0.00000001"
+                      placeholder="e.g. 5000"
+                      value={balanceAmount}
+                      onChange={(e) => setBalanceAmount(e.target.value)}
+                      className="w-full bg-black/50 border border-white/15 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-brand font-mono font-bold"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Optional Memo */}
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground block mb-1.5">
+                  Transaction Note / Reason (Optional)
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g., Manual deposit confirmation, VIP bonus, adjustment"
+                  value={balanceNote}
+                  onChange={(e) => setBalanceNote(e.target.value)}
+                  className="w-full bg-black/50 border border-white/15 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-brand"
+                />
+              </div>
+
+              {/* Calculated Preview */}
+              {selectedBalanceUserObj && balanceAmount && !isNaN(parseFloat(balanceAmount)) && (
+                <div className="p-3.5 rounded-xl bg-brand/10 border border-brand/20 text-xs flex items-center justify-between">
+                  <span className="text-muted-foreground">Operation Result Preview:</span>
+                  <span className="font-bold text-white font-mono">
+                    {balanceOperation === "add" ? (
+                      <span className="text-emerald-400">
+                        ${(selectedBalanceUserObj.realBalance + parseFloat(balanceAmount)).toLocaleString()} (+${parseFloat(balanceAmount).toLocaleString()})
+                      </span>
+                    ) : balanceOperation === "deduct" ? (
+                      <span className="text-red-400">
+                        ${Math.max(0, selectedBalanceUserObj.realBalance - parseFloat(balanceAmount)).toLocaleString()} (-${parseFloat(balanceAmount).toLocaleString()})
+                      </span>
+                    ) : (
+                      <span className="text-brand font-bold">
+                        Set to ${parseFloat(balanceAmount).toLocaleString()}
+                      </span>
+                    )}
+                  </span>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={balanceSubmitting || !balanceUser}
+                className="w-full py-3 bg-brand hover:bg-brand/90 text-white rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer shadow-lg shadow-brand/20"
+              >
+                {balanceSubmitting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
+                <span>Apply Balance Adjustment</span>
+              </button>
+            </form>
+          </GlassCard>
+        </motion.div>
+      )}
+
+      {/* ----------------------------------------------------------------- */}
+      {/* TAB 4: SUBMISSIONS & USER INPUTS (Deposit & Withdrawal Inspector) */}
+      {/* ----------------------------------------------------------------- */}
+      {activeTab === "submissions" && (
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+            <div>
+              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                <ArrowUpRight className="w-5 h-5 text-brand" /> User Submissions & Inputs ({submissionsList.length})
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                View all details users inputted across Deposit, Withdrawal, and Banking requests.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <select
+                value={submissionFilter}
+                onChange={(e) => setSubmissionFilter(e.target.value as any)}
+                className="bg-black/40 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-brand"
+              >
+                <option value="all">All Types & Status</option>
+                <option value="deposit">Deposits Only</option>
+                <option value="withdraw">Withdrawals Only</option>
+                <option value="Pending">Pending Only</option>
+                <option value="Approved">Approved Only</option>
+                <option value="Cancelled">Cancelled Only</option>
+              </select>
+
+              <div className="relative flex-1 sm:w-60">
+                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  type="text"
+                  placeholder="Search user, ref, method..."
+                  value={submissionSearch}
+                  onChange={(e) => setSubmissionSearch(e.target.value)}
+                  className="w-full bg-black/40 border border-white/10 rounded-lg pl-9 pr-3 py-1.5 text-xs text-white placeholder-muted-foreground focus:outline-none focus:border-brand"
+                />
+              </div>
+            </div>
+          </div>
+
+          <GlassCard className="p-0 border-white/10 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-black/60 border-b border-white/10 text-muted-foreground font-semibold uppercase tracking-wider text-[10px]">
+                  <tr>
+                    <th className="px-4 py-3">Type</th>
+                    <th className="px-4 py-3">User & Email</th>
+                    <th className="px-4 py-3">Method & Reference</th>
+                    <th className="px-4 py-3">Amount Input</th>
+                    <th className="px-4 py-3">Input Details</th>
+                    <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5 text-slate-200">
+                  {filteredSubmissions.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="text-center py-12 text-muted-foreground text-xs">
+                        No submissions matching filter.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredSubmissions.map((sub) => (
+                      <tr key={sub.id} className="hover:bg-white/[0.03] transition-colors">
+                        <td className="px-4 py-3">
+                          <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
+                            sub.type === "deposit" ? "bg-emerald-500/20 text-emerald-400" : "bg-purple-500/20 text-purple-400"
+                          }`}>
+                            {sub.type?.toUpperCase()}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="font-bold text-white">{sub.username}</div>
+                          <div className="text-[10px] text-muted-foreground font-mono">{sub.email}</div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="font-medium text-white">{sub.method}</div>
+                          <div className="text-[10px] text-muted-foreground font-mono">{sub.reference}</div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="font-bold text-white">{sub.totalUsd || sub.amountVal}</span>
+                          <span className="text-[10px] text-muted-foreground block">
+                            {sub.amountVal} {sub.amountAsset}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 max-w-xs">
+                          {sub.details ? (
+                            <div className="text-[11px] text-slate-300 truncate">
+                              {sub.details.walletAddress && (
+                                <span className="block font-mono text-[10px] text-brand truncate">
+                                  Addr: {sub.details.walletAddress}
+                                </span>
+                              )}
+                              {sub.details.bankName && (
+                                <span className="block text-[10px]">
+                                  Bank: {sub.details.bankName} (Acct: {sub.details.accountNumber || "N/A"})
+                                </span>
+                              )}
+                              {sub.details.withdrawalCode && (
+                                <span className="block text-[10px] text-amber-400">
+                                  Code: {sub.details.withdrawalCode}
+                                </span>
+                              )}
+                              {!sub.details.walletAddress && !sub.details.bankName && !sub.details.withdrawalCode && (
+                                <span className="text-muted-foreground italic">Standard submission</span>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground italic">No extra inputs</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
+                            sub.status === "Approved" ? "bg-emerald-500/20 text-emerald-400" :
+                            sub.status === "Cancelled" ? "bg-red-500/20 text-red-400" :
+                            "bg-amber-500/20 text-amber-400"
+                          }`}>
+                            {sub.status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            {sub.status !== "Approved" && (
+                              <button
+                                onClick={() => handleUpdateSubmissionStatus(sub.id, "Approved")}
+                                title="Approve"
+                                className="p-1.5 bg-emerald-500/15 hover:bg-emerald-500/30 text-emerald-400 rounded transition-colors"
+                              >
+                                <Check className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                            {sub.status !== "Cancelled" && (
+                              <button
+                                onClick={() => handleUpdateSubmissionStatus(sub.id, "Cancelled")}
+                                title="Reject / Cancel"
+                                className="p-1.5 bg-red-500/15 hover:bg-red-500/30 text-red-400 rounded transition-colors"
+                              >
+                                <XCircle className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                            <button
+                              onClick={() => setInspectSubmission(sub)}
+                              className="px-2 py-1 bg-white/10 hover:bg-white/20 text-white rounded text-[11px] transition-colors"
+                            >
+                              Inspect
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </GlassCard>
+        </motion.div>
+      )}
+
+      {/* ----------------------------------------------------------------- */}
+      {/* TAB 5: SUPPORT CHATS (Live Real-Time Support Desk) */}
+      {/* ----------------------------------------------------------------- */}
+      {activeTab === "chats" && (
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
+          <div>
+            <h2 className="text-lg font-bold text-white flex items-center gap-2">
+              <MessageSquare className="w-5 h-5 text-brand" /> Live Support Hub ({supportChats.length} conversations)
+            </h2>
+            <p className="text-xs text-muted-foreground">
+              Monitor active user chats and respond in real-time as Administrator.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 min-h-[500px]">
+            {/* Conversation List */}
+            <GlassCard className="p-3 border-white/10 md:col-span-1 flex flex-col h-[520px]">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground px-2 mb-2">
+                Conversations
+              </h3>
+              <div className="flex-1 overflow-y-auto space-y-1 pr-1">
+                {supportChats.length === 0 ? (
+                  <div className="py-12 text-center text-xs text-muted-foreground">
+                    No active user support chats yet.
+                  </div>
+                ) : (
+                  supportChats.map((chat) => {
+                    const isActive = chat.id === activeChatId;
+                    const lastMsg = chat.messages?.[chat.messages.length - 1];
+                    return (
+                      <button
+                        key={chat.id}
+                        onClick={() => setActiveChatId(chat.id)}
+                        className={`w-full text-left p-3 rounded-xl transition-all flex items-start gap-3 cursor-pointer ${
+                          isActive
+                            ? "bg-brand/20 border border-brand/40 text-white"
+                            : "hover:bg-white/5 text-slate-300 border border-transparent"
+                        }`}
+                      >
+                        <div className="w-9 h-9 rounded-full bg-brand/20 border border-brand/30 flex items-center justify-center text-brand font-bold text-xs shrink-0 mt-0.5">
+                          {chat.avatar || chat.username?.substring(0, 2).toUpperCase() || "??"}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-xs text-white truncate">{chat.name || chat.username}</span>
+                            <span className="text-[10px] text-muted-foreground">{lastMsg?.time || ""}</span>
+                          </div>
+                          <p className="text-[11px] text-muted-foreground truncate mt-0.5">
+                            {lastMsg?.text || "Started conversation"}
+                          </p>
+                        </div>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            </GlassCard>
+
+            {/* Active Chat Window */}
+            <GlassCard className="p-0 border-white/10 md:col-span-2 flex flex-col h-[520px] overflow-hidden">
+              {currentChat ? (
+                <>
+                  {/* Chat Top Header */}
+                  <div className="p-4 bg-black/40 border-b border-white/10 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-full bg-brand/20 border border-brand/30 flex items-center justify-center text-brand font-bold text-xs">
+                        {currentChat.avatar || currentChat.username?.substring(0, 2).toUpperCase() || "??"}
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-sm text-white">{currentChat.name || currentChat.username}</h4>
+                        <span className="text-[10px] text-emerald-400 flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Active Support Session
+                        </span>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => triggerBalanceForUser(currentChat.username)}
+                      className="px-2.5 py-1 bg-white/10 hover:bg-white/20 text-white rounded text-xs transition-colors flex items-center gap-1"
+                    >
+                      <DollarSign className="w-3 h-3 text-emerald-400" /> Fund User
+                    </button>
+                  </div>
+
+                  {/* Message Thread */}
+                  <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-black/20">
+                    {currentChat.messages?.map((msg: any) => {
+                      const isAdmin = msg.senderType === "admin" || msg.sender === "Admin";
+                      return (
+                        <div
+                          key={msg.id}
+                          className={`flex flex-col ${isAdmin ? "items-end" : "items-start"}`}
+                        >
+                          <div
+                            className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-xs ${
+                              isAdmin
+                                ? "bg-brand text-white rounded-br-none shadow-md shadow-brand/10"
+                                : "bg-white/10 text-slate-100 rounded-bl-none border border-white/5"
+                            }`}
+                          >
+                            <p className="leading-relaxed">{msg.text}</p>
+                          </div>
+                          <span className="text-[9px] text-muted-foreground mt-1 px-1">
+                            {isAdmin ? "Admin (You)" : currentChat.name} • {msg.time}
+                          </span>
+                        </div>
+                      );
+                    })}
+                    <div ref={chatEndRef} />
+                  </div>
+
+                  {/* Message Input Box */}
+                  <form
+                    onSubmit={(e) => { e.preventDefault(); handleSendChatReply(); }}
+                    className="p-3 bg-black/40 border-t border-white/10 flex items-center gap-2"
+                  >
+                    <input
+                      type="text"
+                      placeholder={`Reply to ${currentChat.name || currentChat.username} as Admin...`}
+                      value={chatReplyText}
+                      onChange={(e) => setChatReplyText(e.target.value)}
+                      className="flex-1 bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white placeholder-muted-foreground focus:outline-none focus:border-brand"
+                    />
+                    <button
+                      type="submit"
+                      disabled={sendingChat || !chatReplyText.trim()}
+                      className="p-2.5 bg-brand hover:bg-brand/90 text-white rounded-xl disabled:opacity-50 transition-all cursor-pointer"
+                    >
+                      <Send className="w-4 h-4" />
+                    </button>
+                  </form>
+                </>
+              ) : (
+                <div className="flex-1 flex items-center justify-center text-muted-foreground text-xs">
+                  Select a chat conversation on the left to start replying.
+                </div>
+              )}
+            </GlassCard>
+          </div>
+        </motion.div>
+      )}
+
+      {/* ----------------------------------------------------------------- */}
+      {/* TAB 6: ACTIVITY LOGS */}
+      {/* ----------------------------------------------------------------- */}
+      {activeTab === "logs" && (
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+            <div>
+              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                <Terminal className="w-5 h-5 text-brand" /> System Activity Audit Stream ({logs.length})
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                Real-time security audits, logins, transactions, and balance operations.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <select
+                value={logCategoryFilter}
+                onChange={(e) => setLogCategoryFilter(e.target.value)}
+                className="bg-black/40 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-brand"
+              >
+                <option value="all">All Categories</option>
+                <option value="security">Security & Auth</option>
+                <option value="wallet">Wallet & Funds</option>
+                <option value="trade">Trades</option>
+                <option value="chat">Support Chat</option>
+              </select>
+
+              <div className="relative flex-1 sm:w-60">
+                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  type="text"
+                  placeholder="Search logs..."
+                  value={logSearch}
+                  onChange={(e) => setLogSearch(e.target.value)}
+                  className="w-full bg-black/40 border border-white/10 rounded-lg pl-9 pr-3 py-1.5 text-xs text-white placeholder-muted-foreground focus:outline-none focus:border-brand"
+                />
+              </div>
+            </div>
+          </div>
+
+          <GlassCard className="p-0 border-white/10 overflow-hidden">
+            <div className="overflow-x-auto max-h-[600px]">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-black/60 border-b border-white/10 text-muted-foreground font-semibold uppercase tracking-wider text-[10px] sticky top-0 backdrop-blur-md">
+                  <tr>
+                    <th className="px-4 py-3">Timestamp</th>
+                    <th className="px-4 py-3">User</th>
+                    <th className="px-4 py-3">Action Description</th>
+                    <th className="px-4 py-3">Category</th>
+                    <th className="px-4 py-3">IP & Location</th>
+                    <th className="px-4 py-3">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5 text-slate-200">
+                  {filteredLogs.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="text-center py-12 text-muted-foreground text-xs">
+                        No activity logs matching query.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredLogs.map((log) => (
+                      <tr key={log.id} className="hover:bg-white/[0.03] transition-colors">
+                        <td className="px-4 py-2.5 font-mono text-[11px] text-muted-foreground whitespace-nowrap">
+                          {new Date(log.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                        </td>
+                        <td className="px-4 py-2.5 font-semibold text-white">
+                          {log.userName}
+                        </td>
+                        <td className="px-4 py-2.5 text-slate-300">
+                          {log.action}
+                        </td>
+                        <td className="px-4 py-2.5">
+                          <span className="px-2 py-0.5 rounded text-[10px] bg-white/10 font-mono">
+                            {log.category}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2.5 font-mono text-[10px] text-muted-foreground">
+                          {log.ipAddress}
+                        </td>
+                        <td className="px-4 py-2.5">
+                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                            log.status === "success" ? "text-emerald-400 bg-emerald-500/15" :
+                            log.status === "warning" ? "text-amber-400 bg-amber-500/15" :
+                            "text-red-400 bg-red-500/15"
+                          }`}>
+                            {log.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </GlassCard>
+        </motion.div>
+      )}
+
+      {/* ----------------------------------------------------------------- */}
+      {/* MODAL: USER DETAILS & SUBMISSIONS INSPECTOR */}
+      {/* ----------------------------------------------------------------- */}
+      <AnimatePresence>
+        {inspectUser && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="w-full max-w-xl bg-slate-900 border border-white/15 rounded-2xl p-6 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto"
+            >
+              <div className="flex items-center justify-between border-b border-white/10 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-brand/20 border border-brand/40 flex items-center justify-center text-brand font-bold">
+                    {inspectUser.avatar || inspectUser.username.substring(0, 2).toUpperCase()}
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-lg text-white">{inspectUser.username}</h3>
+                    <p className="text-xs text-muted-foreground">{inspectUser.email}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setInspectUser(null)}
+                  className="p-1 rounded-lg hover:bg-white/10 text-muted-foreground hover:text-white"
+                >
+                  <XCircle className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Profile Details Grid */}
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div className="p-3 bg-black/40 rounded-xl border border-white/5">
+                  <span className="text-muted-foreground block text-[10px] uppercase">Password (Raw)</span>
+                  <span className="font-mono font-bold text-amber-300 text-sm select-all">{inspectUser.password}</span>
+                </div>
+                <div className="p-3 bg-black/40 rounded-xl border border-white/5">
+                  <span className="text-muted-foreground block text-[10px] uppercase">Real Balance</span>
+                  <span className="font-bold text-emerald-400 text-sm">${inspectUser.realBalance?.toLocaleString()}</span>
+                </div>
+                <div className="p-3 bg-black/40 rounded-xl border border-white/5">
+                  <span className="text-muted-foreground block text-[10px] uppercase">Phone Number</span>
+                  <span className="font-medium text-white">{inspectUser.phone || "None"}</span>
+                </div>
+                <div className="p-3 bg-black/40 rounded-xl border border-white/5">
+                  <span className="text-muted-foreground block text-[10px] uppercase">Country</span>
+                  <span className="font-medium text-white">{inspectUser.country || "None"}</span>
+                </div>
+                <div className="p-3 bg-black/40 rounded-xl border border-white/5">
+                  <span className="text-muted-foreground block text-[10px] uppercase">Currency</span>
+                  <span className="font-medium text-white">{inspectUser.currency || "USD"}</span>
+                </div>
+                <div className="p-3 bg-black/40 rounded-xl border border-white/5">
+                  <span className="text-muted-foreground block text-[10px] uppercase">Referral Code</span>
+                  <span className="font-medium text-white">{inspectUser.referralCode || "None"}</span>
+                </div>
+              </div>
+
+              {/* Submissions by this user */}
+              <div>
+                <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">
+                  Deposit & Withdrawal Activity ({inspectUser.submissions?.length || 0})
+                </h4>
+                {(!inspectUser.submissions || inspectUser.submissions.length === 0) ? (
+                  <p className="text-xs text-muted-foreground italic py-3">No submissions yet for this account.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {inspectUser.submissions.map((s: any) => (
+                      <div key={s.id} className="p-3 bg-black/30 rounded-xl border border-white/5 text-xs flex items-center justify-between">
+                        <div>
+                          <div className="font-bold text-white">
+                            {s.type?.toUpperCase()} — {s.totalUsd || s.amountVal}
+                          </div>
+                          <div className="text-[10px] text-muted-foreground">
+                            {s.method} • Ref: {s.reference}
+                          </div>
+                        </div>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
+                          s.status === "Approved" ? "bg-emerald-500/20 text-emerald-400" :
+                          s.status === "Cancelled" ? "bg-red-500/20 text-red-400" :
+                          "bg-amber-500/20 text-amber-400"
+                        }`}>
+                          {s.status}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  onClick={() => {
+                    const uname = inspectUser.username;
+                    setInspectUser(null);
+                    triggerBalanceForUser(uname, "add");
+                  }}
+                  className="flex-1 py-2.5 bg-brand hover:bg-brand/90 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-1 cursor-pointer"
+                >
+                  <DollarSign className="w-4 h-4" /> Fund This Account
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ----------------------------------------------------------------- */}
+      {/* MODAL: SUBMISSION DETAILS INSPECTOR */}
+      {/* ----------------------------------------------------------------- */}
+      <AnimatePresence>
+        {inspectSubmission && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="w-full max-w-lg bg-slate-900 border border-white/15 rounded-2xl p-6 shadow-2xl space-y-4"
+            >
+              <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                <h3 className="font-bold text-base text-white flex items-center gap-2">
+                  <ArrowUpRight className="w-5 h-5 text-brand" /> Submission Details
+                </h3>
+                <button onClick={() => setInspectSubmission(null)} className="text-muted-foreground hover:text-white">
+                  <XCircle className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="space-y-3 text-xs">
+                <div className="flex justify-between py-1 border-b border-white/5">
+                  <span className="text-muted-foreground">User:</span>
+                  <span className="font-bold text-white">{inspectSubmission.username} ({inspectSubmission.email})</span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-white/5">
+                  <span className="text-muted-foreground">Type:</span>
+                  <span className="font-bold uppercase text-brand">{inspectSubmission.type}</span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-white/5">
+                  <span className="text-muted-foreground">Reference ID:</span>
+                  <span className="font-mono text-white select-all">{inspectSubmission.reference}</span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-white/5">
+                  <span className="text-muted-foreground">Amount:</span>
+                  <span className="font-bold text-emerald-400">{inspectSubmission.totalUsd} ({inspectSubmission.amountVal} {inspectSubmission.amountAsset})</span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-white/5">
+                  <span className="text-muted-foreground">Method:</span>
+                  <span className="text-white">{inspectSubmission.method}</span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-white/5">
+                  <span className="text-muted-foreground">Current Status:</span>
+                  <span className="font-bold text-amber-400">{inspectSubmission.status}</span>
+                </div>
+
+                {inspectSubmission.details && (
+                  <div className="p-3 bg-black/40 rounded-xl border border-white/5 space-y-1.5 mt-2">
+                    <span className="text-[10px] uppercase font-bold text-muted-foreground block">User Input Payload</span>
+                    {Object.entries(inspectSubmission.details).map(([key, val]) => (
+                      <div key={key} className="flex justify-between text-[11px]">
+                        <span className="text-muted-foreground capitalize">{key}:</span>
+                        <span className="font-mono text-white select-all">{String(val)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex gap-2 pt-3">
+                <button
+                  onClick={() => {
+                    handleUpdateSubmissionStatus(inspectSubmission.id, "Approved");
+                    setInspectSubmission(null);
+                  }}
+                  className="flex-1 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-bold text-xs transition-colors"
+                >
+                  Approve Submission
+                </button>
+                <button
+                  onClick={() => {
+                    handleUpdateSubmissionStatus(inspectSubmission.id, "Cancelled");
+                    setInspectSubmission(null);
+                  }}
+                  className="flex-1 py-2 bg-red-500 hover:bg-red-600 text-white rounded-xl font-bold text-xs transition-colors"
+                >
+                  Reject / Cancel
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
     </div>
   );

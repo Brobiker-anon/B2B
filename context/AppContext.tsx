@@ -158,6 +158,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         })
       );
     }
+
+    const handleStorageChange = (e: StorageEvent) => {
+      if (user?.username && e.key === storageKey && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          setRealBalance(parsed.realBalance ?? 0);
+          setDemoBalance(parsed.demoBalance ?? 0);
+          setUsdtBalance(parsed.usdtBalance ?? (parsed.realBalance ?? 0));
+          setBtcBalance(parsed.btcBalance ?? 0);
+          setStakedBalance(parsed.stakedBalance ?? 0);
+          setMiningEarnings(parsed.miningEarnings ?? 0);
+        } catch {}
+      }
+    };
+
+    window.addEventListener("storage", handleStorageChange);
+    return () => window.removeEventListener("storage", handleStorageChange);
   }, [user?.username]);
 
   // Persist updated balances to localStorage for active user

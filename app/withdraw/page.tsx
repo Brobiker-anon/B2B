@@ -9,7 +9,11 @@ import {
   ChevronDown,
   X,
   ArrowLeft,
-  ChevronRight
+  ChevronRight,
+  ShieldAlert,
+  Clock,
+  AlertTriangle,
+  Info
 } from "lucide-react";
 import { useApp } from "@/context/AppContext";
 
@@ -41,6 +45,8 @@ export default function Withdraw() {
   const [accountNumber, setAccountNumber] = useState("");
   const [accountName, setAccountName] = useState("");
   const [routingNumber, setRoutingNumber] = useState("");
+  const [bankAmount, setBankAmount] = useState("");
+  const [bankWithdrawalCode, setBankWithdrawalCode] = useState("");
 
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
@@ -55,6 +61,48 @@ export default function Withdraw() {
     ETH: 3500.00,
     SOL: 145.00
   };
+
+  // Load submissions from API or localStorage
+  useEffect(() => {
+    async function fetchSubmissions() {
+      try {
+        const res = await fetch("/api/submissions");
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && Array.isArray(data.submissions)) {
+            const withdraws = data.submissions
+              .filter((s: any) => s.type === "withdrawal")
+              .map((s: any) => ({
+                id: s.id,
+                date: new Date(s.timestamp || Date.now()).toLocaleDateString(),
+                reference: s.reference,
+                method: s.method,
+                type: "withdrawal",
+                amountVal: s.amountVal,
+                amountAsset: s.amountAsset,
+                totalAud: s.details?.totalAud || `$${parseFloat(s.amountVal || "0").toFixed(2)}`,
+                status: s.status || "Pending",
+              }));
+            setWithdrawalRecords(withdraws);
+            return;
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load submissions:", err);
+      }
+
+      if (typeof window !== "undefined") {
+        const saved = localStorage.getItem("brokerage_withdrawals");
+        if (saved) {
+          try {
+            setWithdrawalRecords(JSON.parse(saved));
+          } catch {}
+        }
+      }
+    }
+
+    fetchSubmissions();
+  }, []);
 
   // Get available balance depending on asset
   const getAvailableBalance = (asset: string) => {
@@ -83,6 +131,8 @@ export default function Withdraw() {
     setAccountNumber("");
     setAccountName("");
     setRoutingNumber("");
+    setBankAmount("");
+    setBankWithdrawalCode("");
   };
 
   const handleMethodContinue = () => {
@@ -106,6 +156,7 @@ export default function Withdraw() {
     }
   };
 
+  // Submit crypto withdrawal
   const handleWithdrawSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const amt = parseFloat(withdrawAmount);
@@ -152,35 +203,37 @@ export default function Withdraw() {
 
     // Deduct live balances
     if (selectedAsset === "BTC") {
-      setBtcBalance((prev) => prev - amt);
+      setBtcBalance((prev) => Math.max(0, prev - amt));
     } else if (selectedAsset === "USDT") {
-      setUsdtBalance((prev) => prev - amt);
+      setUsdtBalance((prev) => Math.max(0, prev - amt));
     }
 
-    // Generate record
-    const refCode = "WD" + Math.floor(Math.random() * 90000 + 10000);
-    const estimatedAud = usdVal * 1.5;
-
+    const refCode = "REF" + Math.floor(Math.random() * 9000000 + 1000000);
     const newRecord: WithdrawalRecord = {
-      id: Date.now().toString(),
-      date: "Just now",
+      id: "WD-" + Math.floor(Math.random() * 900000 + 100000),
+      date: new Date().toLocaleDateString(),
       reference: refCode,
       method: selectedAsset,
-      type: "Regular",
+      type: "withdrawal",
       amountVal: amt.toString(),
       amountAsset: selectedAsset,
-      totalAud: `A$${estimatedAud.toLocaleString(undefined, { minimumFractionDigits: 3, maximumFractionDigits: 3 })}`,
+      totalAud: `$${usdVal.toFixed(2)}`,
       status: "Pending"
     };
 
-    setWithdrawalRecords((prev) => [newRecord, ...prev]);
-    addToast(`Successfully requested withdrawal of ${amt} ${selectedAsset}`, "success");
+    const updated = [newRecord, ...withdrawalRecords];
+    setWithdrawalRecords(updated);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("brokerage_withdrawals", JSON.stringify(updated));
+    }
+
+    addToast("Withdrawal request submitted for review (Pending 3-month account maturation verification)", "info");
     handleCloseModal();
 
     await persistSubmission({
-      type: "withdraw",
-      reference: refCode,
+      type: "withdrawal",
       method: selectedAsset,
+      reference: newRecord.reference,
       amountVal: amt.toString(),
       amountAsset: selectedAsset,
       totalUsd: `$${usdVal.toFixed(2)}`,
@@ -193,12 +246,21 @@ export default function Withdraw() {
     });
   };
 
+  // Submit bank withdrawal
   const handleBankSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!bankName || !accountNumber || !accountName) {
+      addToast("Please fill in all required bank details", "error");
+      return;
+    }
     const amt = parseFloat(withdrawAmount);
-    
     if (isNaN(amt) || amt < 100) {
-      addToast("Minimum bank withdrawal is $100", "error");
+      addToast("Minimum withdrawal amount is $100", "error");
+      return;
+    }
+    if (!withdrawalCode) {
+      addToast("Please enter your withdrawal code", "error");
       return;
     }
 
@@ -207,36 +269,34 @@ export default function Withdraw() {
       return;
     }
 
-    if (!bankName.trim() || !accountNumber.trim() || !accountName.trim()) {
-      addToast("Please fill in all bank transfer fields", "error");
-      return;
-    }
+    setUsdtBalance((prev) => Math.max(0, prev - amt));
 
-    setUsdtBalance((prev) => prev - amt);
-
-    const refCode = "WD" + Math.floor(Math.random() * 90000 + 10000);
-    const estimatedAud = amt * 1.5;
-
+    const refCode = "REF" + Math.floor(Math.random() * 9000000 + 1000000);
     const newRecord: WithdrawalRecord = {
-      id: Date.now().toString(),
-      date: "Just now",
+      id: "WD-" + Math.floor(Math.random() * 900000 + 100000),
+      date: new Date().toLocaleDateString(),
       reference: refCode,
-      method: "Bank",
-      type: "Regular",
+      method: "Bank Transfer",
+      type: "withdrawal",
       amountVal: amt.toString(),
       amountAsset: "USD",
-      totalAud: `A$${estimatedAud.toLocaleString(undefined, { minimumFractionDigits: 3, maximumFractionDigits: 3 })}`,
+      totalAud: `$${amt.toFixed(2)}`,
       status: "Pending"
     };
 
-    setWithdrawalRecords((prev) => [newRecord, ...prev]);
-    addToast(`Bank transfer withdrawal request of $${amt} submitted!`, "success");
+    const updated = [newRecord, ...withdrawalRecords];
+    setWithdrawalRecords(updated);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("brokerage_withdrawals", JSON.stringify(updated));
+    }
+
+    addToast("Bank withdrawal submitted for review (Pending 3-month account maturation verification)", "info");
     handleCloseModal();
 
     await persistSubmission({
-      type: "withdraw",
-      reference: refCode,
+      type: "withdrawal",
       method: "Bank Transfer",
+      reference: newRecord.reference,
       amountVal: amt.toString(),
       amountAsset: "USD",
       totalUsd: `$${amt.toFixed(2)}`,
@@ -263,8 +323,36 @@ export default function Withdraw() {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
-      className="max-w-7xl mx-auto space-y-8 text-slate-100 min-h-[80vh]"
+      className="max-w-7xl mx-auto space-y-6 text-slate-100 min-h-[80vh]"
     >
+      {/* 3-Month Account Maturation & Security Hold Notice Banner */}
+      <div className="rounded-xl border border-amber-500/30 bg-gradient-to-r from-amber-950/40 via-amber-900/20 to-black/40 p-4.5 text-amber-200 shadow-xl backdrop-blur-md">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-start gap-3.5">
+            <div className="p-2.5 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 shrink-0 mt-0.5">
+              <ShieldAlert className="w-5 h-5" />
+            </div>
+            <div className="space-y-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-sm font-bold text-white tracking-wide">3-Month Account Maturation Policy</h2>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-400/20 text-amber-300 border border-amber-400/30 uppercase tracking-wider">
+                  AML Compliance Security Hold
+                </span>
+              </div>
+              <p className="text-xs text-amber-200/90 leading-relaxed max-w-4xl">
+                In compliance with international financial regulations and anti-money laundering (AML) protocols, <strong>accounts cannot execute outbound withdrawals until 3 months (90 days) after initial signup</strong>. Funds remain fully available for live trading, staking, and investments during this holding period.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+            <div className="px-3 py-1.5 rounded-lg bg-black/40 border border-amber-500/30 text-[11px] font-mono font-bold text-amber-300 flex items-center gap-1.5">
+              <Clock className="w-3.5 h-3.5 text-amber-400" />
+              <span>90-Day Hold Period</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div className="space-y-6">
         {/* Header controls matching screenshot */}
         <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
@@ -423,6 +511,17 @@ export default function Withdraw() {
                     </div>
                   </div>
 
+                  {/* 3-Month Security Maturation Notice */}
+                  <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3.5 flex items-start gap-3 text-xs text-amber-200">
+                    <Clock className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                    <div className="space-y-0.5">
+                      <span className="font-bold text-white block">3-Month Security Maturation Notice</span>
+                      <p className="text-[11px] text-amber-200/90 leading-snug">
+                        For regulatory compliance and anti-money laundering (AML) protocols, withdrawals cannot be executed until <strong>3 months (90 days)</strong> after initial account registration.
+                      </p>
+                    </div>
+                  </div>
+
                   {/* Limit summary info */}
                   <div className="space-y-2 pt-2 border-t border-white/5 text-xs font-mono">
                     <div className="flex justify-between">
@@ -432,6 +531,10 @@ export default function Withdraw() {
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Maximum withdrawal</span>
                       <span className="text-white font-bold">$50,000,000</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Account Hold Period</span>
+                      <span className="text-amber-400 font-bold">90 Days (3 Months)</span>
                     </div>
                   </div>
 
@@ -534,6 +637,12 @@ export default function Withdraw() {
                     <span className="text-sm font-extrabold text-white font-mono">${getCryptoValUsd().toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                   </div>
 
+                  {/* Maturation reminder */}
+                  <p className="text-[10px] text-amber-300/80 text-center flex items-center justify-center gap-1.5 pt-1">
+                    <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                    <span>3-month account maturation policy applies before initial outbound settlement</span>
+                  </p>
+
                   <button
                     type="submit"
                     className={`w-full py-3 rounded-xl font-bold text-xs uppercase tracking-wide cursor-pointer transition-all ${
@@ -627,6 +736,12 @@ export default function Withdraw() {
                       <span className="text-white font-bold">${usdtBalance.toLocaleString()}</span>
                     </div>
                   </div>
+
+                  {/* Maturation reminder */}
+                  <p className="text-[10px] text-amber-300/80 text-center flex items-center justify-center gap-1.5 pt-1">
+                    <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                    <span>3-month account maturation policy applies before initial outbound settlement</span>
+                  </p>
 
                   <button
                     type="submit"

@@ -6,7 +6,6 @@ import { Eye, EyeOff, RefreshCw, ChevronDown } from "lucide-react";
 import { useApp } from "@/context/AppContext";
 
 const COUNTRIES = [
-  { name: "Nigeria", flag: "🇳🇬", code: "+234" },
   { name: "United States", flag: "🇺🇸", code: "+1" },
   { name: "United Kingdom", flag: "🇬🇧", code: "+44" },
   { name: "Canada", flag: "🇨🇦", code: "+1" },
@@ -18,6 +17,7 @@ const COUNTRIES = [
   { name: "Brazil", flag: "🇧🇷", code: "+55" },
   { name: "South Africa", flag: "🇿🇦", code: "+27" },
   { name: "United Arab Emirates", flag: "🇦🇪", code: "+971" },
+  { name: "Nigeria", flag: "🇳🇬", code: "+234" },
 ];
 
 const CURRENCIES = [

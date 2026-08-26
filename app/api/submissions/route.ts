@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { addSubmission, getSubmissions, addServerLog } from "@/utils/serverDb";
+import { addSubmission, getSubmissions, updateSubmissionStatus, addServerLog } from "@/utils/serverDb";
 
 export const dynamic = "force-dynamic";
 
@@ -43,14 +43,16 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { type, reference, method, amountVal, amountAsset, totalUsd, status, details } = body;
+    let { type, reference, method, amountVal, amountAsset, totalUsd, status, details } = body;
 
-    if (!type || !["deposit", "withdraw"].includes(type)) {
+    const normalizedType = type === "withdrawal" || type === "withdraw" ? "withdraw" : type === "deposit" ? "deposit" : null;
+
+    if (!normalizedType) {
       return NextResponse.json({ error: "Invalid submission type." }, { status: 400 });
     }
 
     const submission = addSubmission({
-      type,
+      type: normalizedType,
       username: session.username,
       email: session.email || "",
       reference: reference || `REF-${Date.now()}`,
@@ -68,7 +70,7 @@ export async function POST(request: Request) {
       userEmail: session.email || "",
       userRole: session.role || "User",
       avatar: session.avatar || "??",
-      action: `${type === "deposit" ? "Deposit" : "Withdrawal"} submitted: ${submission.reference} (${submission.totalUsd})`,
+      action: `${normalizedType === "deposit" ? "Deposit" : "Withdrawal"} submitted: ${submission.reference} (${submission.totalUsd})`,
       category: "wallet",
       status: "success",
       severity: "info",
@@ -84,3 +86,51 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Internal server error." }, { status: 500 });
   }
 }
+
+export async function PATCH(request: Request) {
+  try {
+    const session = await getSession();
+    if (!session?.username || session.role !== "Administrator") {
+      return NextResponse.json({ error: "Admin authorization required." }, { status: 403 });
+    }
+
+    const body = await request.json();
+    const { id, status, note } = body;
+
+    if (!id || !status || !["Approved", "Pending", "Cancelled"].includes(status)) {
+      return NextResponse.json({ error: "Valid submission ID and status ('Approved' | 'Pending' | 'Cancelled') required." }, { status: 400 });
+    }
+
+    const updated = updateSubmissionStatus(id, status as "Approved" | "Pending" | "Cancelled", note);
+    if (!updated) {
+      return NextResponse.json({ error: "Submission not found." }, { status: 404 });
+    }
+
+    addServerLog({
+      userId: `usr-${session.username}`,
+      userName: session.username,
+      userEmail: session.email || "",
+      userRole: session.role || "Administrator",
+      avatar: session.avatar || "AD",
+      action: `Submission ${updated.reference} status changed to ${status}`,
+      category: "wallet",
+      status: "success",
+      severity: "info",
+      ipAddress: "127.0.0.1",
+      location: "Admin Portal",
+      browser: "Admin Action",
+      details: {
+        submissionId: id,
+        reference: updated.reference,
+        newStatus: status,
+        note: note || "",
+      },
+    });
+
+    return NextResponse.json({ success: true, submission: updated });
+  } catch (error) {
+    console.error("PATCH /api/submissions error:", error);
+    return NextResponse.json({ error: "Internal server error." }, { status: 500 });
+  }
+}
+
