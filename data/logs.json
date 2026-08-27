@@ -1,5 +1,24 @@
 [
   {
+    "userId": "usr-john-doe",
+    "userName": "John Doe",
+    "userEmail": "john.doe@brokerage.com",
+    "userRole": "Retail Investor",
+    "avatar": "JD",
+    "action": "User joined ApexVeltrix Community Chat lounge",
+    "category": "chat",
+    "status": "success",
+    "severity": "info",
+    "ipAddress": "192.168.1.104",
+    "location": "New York, USA",
+    "browser": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "details": {
+      "path": "/chat"
+    },
+    "id": "log-1787873687573-168",
+    "timestamp": "2026-08-27T23:34:47.574Z"
+  },
+  {
     "userId": "usr-aaaaaa",
     "userName": "aaaaaa",
     "userEmail": "aaaaaa@gmail.com",
@@ -3802,24 +3821,5 @@
     },
     "id": "log-1783411345025-105",
     "timestamp": "2026-07-07T08:02:25.025Z"
-  },
-  {
-    "userId": "usr-john-doe",
-    "userName": "John Doe",
-    "userEmail": "john.doe@brokerage.com",
-    "userRole": "Retail Investor",
-    "avatar": "JD",
-    "action": "User opened Asset Allocation ledger",
-    "category": "wallet",
-    "status": "success",
-    "severity": "info",
-    "ipAddress": "192.168.1.104",
-    "location": "New York, USA",
-    "browser": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
-    "details": {
-      "path": "/assets"
-    },
-    "id": "log-1783411329838-452",
-    "timestamp": "2026-07-07T08:02:09.838Z"
   }
 ]

@@ -349,7 +349,8 @@ export const updateUserBalance = (
   operation: "add" | "deduct" | "set",
   asset: "realBalance" | "usdtBalance" | "btcBalance" | "demoBalance" | "stakedBalance" | "miningEarnings",
   amount: number,
-  note?: string
+  note?: string,
+  skipSubmissionLog?: boolean
 ) => {
   const users = getAdminUsers();
   const user = users.find((u: any) => u.username?.toLowerCase() === username.toLowerCase());
@@ -372,6 +373,39 @@ export const updateUserBalance = (
   if (asset === "usdtBalance") user.realBalance = newVal;
 
   saveAdminUsers(users);
+
+  // Automatically record money added by admin into the deposit history ledger
+  if (operation === "add" && !skipSubmissionLog) {
+    try {
+      const isBtc = asset === "btcBalance";
+      const isDemo = asset === "demoBalance";
+      const isStaked = asset === "stakedBalance";
+      const assetSymbol = isBtc ? "BTC" : isDemo ? "USD (Demo)" : isStaked ? "USDT (Staking)" : "USDT";
+      const usdTotal = isBtc ? (amount * 63000).toFixed(2) : amount.toFixed(2);
+      const refCode = "ADM" + Math.floor(100000 + Math.random() * 900000);
+
+      addSubmission({
+        type: "deposit",
+        username: user.username,
+        email: user.email || `${user.username}@user.net`,
+        reference: refCode,
+        method: "Admin Credit",
+        amountVal: amount.toString(),
+        amountAsset: assetSymbol,
+        totalUsd: `$${usdTotal}`,
+        status: "Approved",
+        details: {
+          type: "Direct Credit",
+          source: "Administrator",
+          note: note || "Admin balance credit adjustment",
+          processedAt: new Date().toISOString(),
+          balanceCredited: true,
+        },
+      });
+    } catch (subErr) {
+      console.error("Error creating auto-deposit on balance add:", subErr);
+    }
+  }
 
   addServerLog({
     userId: `usr-${user.username}`,

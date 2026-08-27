@@ -137,7 +137,14 @@ export async function PATCH(request: Request) {
       const amountToCredit = updated.amountAsset === "BTC" ? rawAmt : (usdVal || rawAmt);
 
       if (amountToCredit > 0 && updated.username) {
-        updateUserBalance(updated.username, "add", assetToCredit, amountToCredit, `Auto-credit for approved deposit ${updated.reference}`);
+        updateUserBalance(
+          updated.username,
+          "add",
+          assetToCredit,
+          amountToCredit,
+          `Auto-credit for approved deposit ${updated.reference}`,
+          true
+        );
       }
     }
 
