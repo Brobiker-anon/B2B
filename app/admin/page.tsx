@@ -9,7 +9,8 @@ import {
   Landmark, Wallet, KeyRound, Globe, Phone, Mail, 
   CheckCircle2, XCircle, Clock, AlertCircle, Terminal, 
   LogOut, ShieldAlert, Fingerprint, ChevronRight, UserPlus,
-  Send, UserCheck, Settings, ExternalLink, HelpCircle
+  Send, UserCheck, Settings, ExternalLink, HelpCircle,
+  Pencil, Plus
 } from "lucide-react";
 import GlassCard from "@/components/ui/GlassCard";
 
@@ -99,8 +100,34 @@ export default function AdminPortal() {
   const [accountSearch, setAccountSearch] = useState("");
   const [submissionSearch, setSubmissionSearch] = useState("");
   const [submissionFilter, setSubmissionFilter] = useState<"all" | "deposit" | "withdraw" | "Pending" | "Approved" | "Cancelled">("all");
+  const [submissionUserFilter, setSubmissionUserFilter] = useState<string>("all");
   const [logSearch, setLogSearch] = useState("");
   const [logCategoryFilter, setLogCategoryFilter] = useState("all");
+
+  // Create Deposit Modal State
+  const [isCreateDepositOpen, setIsCreateDepositOpen] = useState(false);
+  const [newDepositUser, setNewDepositUser] = useState("");
+  const [newDepositType, setNewDepositType] = useState<"deposit" | "withdraw">("deposit");
+  const [newDepositMethod, setNewDepositMethod] = useState("Crypto Deposit");
+  const [newDepositAmount, setNewDepositAmount] = useState("");
+  const [newDepositAsset, setNewDepositAsset] = useState("USDT");
+  const [newDepositStatus, setNewDepositStatus] = useState<"Approved" | "Pending" | "Cancelled">("Approved");
+  const [newDepositRef, setNewDepositRef] = useState("");
+  const [newDepositCreditBalance, setNewDepositCreditBalance] = useState(true);
+  const [newDepositNote, setNewDepositNote] = useState("");
+  const [isCreatingDeposit, setIsCreatingDeposit] = useState(false);
+
+  // Edit Submission Modal State
+  const [isEditDepositOpen, setIsEditDepositOpen] = useState(false);
+  const [editingSubmission, setEditingSubmission] = useState<SubmissionItem | null>(null);
+  const [editAmountVal, setEditAmountVal] = useState("");
+  const [editAmountAsset, setEditAmountAsset] = useState("USDT");
+  const [editTotalUsd, setEditTotalUsd] = useState("");
+  const [editMethod, setEditMethod] = useState("");
+  const [editStatus, setEditStatus] = useState<"Approved" | "Pending" | "Cancelled">("Approved");
+  const [editReference, setEditReference] = useState("");
+  const [editNote, setEditNote] = useState("");
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
 
   // Account Password Visibility & Clipboard
   const [revealedPasswords, setRevealedPasswords] = useState<Set<string>>(new Set());
@@ -427,6 +454,136 @@ export default function AdminPortal() {
     }
   };
 
+  // Create Custom Deposit / Submission for User
+  const handleCreateDepositSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newDepositUser) {
+      alert("Please select a user account.");
+      return;
+    }
+    if (!newDepositAmount || parseFloat(newDepositAmount) <= 0) {
+      alert("Please enter a valid deposit amount.");
+      return;
+    }
+
+    setIsCreatingDeposit(true);
+    try {
+      const rawAmt = parseFloat(newDepositAmount) || 0;
+      const isBtc = newDepositAsset === "BTC";
+      const totalUsdVal = isBtc ? `$${(rawAmt * 63000).toFixed(2)}` : `$${rawAmt.toFixed(2)}`;
+
+      const res = await fetch("/api/submissions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: newDepositUser,
+          type: newDepositType,
+          method: newDepositMethod,
+          amountVal: newDepositAmount,
+          amountAsset: newDepositAsset,
+          totalUsd: totalUsdVal,
+          status: newDepositStatus,
+          reference: newDepositRef || undefined,
+          creditBalance: newDepositCreditBalance && newDepositStatus === "Approved" && newDepositType === "deposit",
+          details: {
+            adminNote: newDepositNote || "Admin created deposit entry",
+            source: "Admin Portal",
+            createdAt: new Date().toISOString(),
+          },
+        }),
+      });
+
+      if (res.ok) {
+        setIsCreateDepositOpen(false);
+        setNewDepositAmount("");
+        setNewDepositNote("");
+        setNewDepositRef("");
+        fetchAllAdminData();
+      } else {
+        const d = await res.json();
+        alert(d.error || "Failed to create deposit.");
+      }
+    } catch {
+      alert("Network error creating deposit.");
+    } finally {
+      setIsCreatingDeposit(false);
+    }
+  };
+
+  // Open Edit Modal for a Submission
+  const openEditSubmission = (sub: SubmissionItem) => {
+    setEditingSubmission(sub);
+    setEditAmountVal(sub.amountVal);
+    setEditAmountAsset(sub.amountAsset || "USDT");
+    setEditTotalUsd(sub.totalUsd);
+    setEditMethod(sub.method);
+    setEditStatus(sub.status);
+    setEditReference(sub.reference);
+    setEditNote(sub.details?.adminNote || "");
+    setIsEditDepositOpen(true);
+  };
+
+  // Save Edited Submission
+  const handleSaveEditSubmission = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingSubmission) return;
+
+    setIsSavingEdit(true);
+    try {
+      const res = await fetch("/api/submissions", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: editingSubmission.id,
+          amountVal: editAmountVal,
+          amountAsset: editAmountAsset,
+          totalUsd: editTotalUsd.startsWith("$") ? editTotalUsd : `$${editTotalUsd}`,
+          method: editMethod,
+          status: editStatus,
+          reference: editReference,
+          details: {
+            ...(editingSubmission.details || {}),
+            adminNote: editNote,
+          },
+        }),
+      });
+
+      if (res.ok) {
+        setIsEditDepositOpen(false);
+        setEditingSubmission(null);
+        fetchAllAdminData();
+      } else {
+        const d = await res.json();
+        alert(d.error || "Failed to update submission.");
+      }
+    } catch {
+      alert("Network error saving submission.");
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
+
+  // Delete Submission
+  const handleDeleteSubmission = async (id: string, refCode: string) => {
+    if (!confirm(`Are you sure you want to permanently delete submission "${refCode}"?`)) return;
+    try {
+      const res = await fetch(`/api/submissions?id=${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        setSubmissionsList((prev) => prev.filter((s) => s.id !== id));
+        if (inspectSubmission?.id === id) setInspectSubmission(null);
+        if (editingSubmission?.id === id) setIsEditDepositOpen(false);
+        fetchAllAdminData();
+      } else {
+        const d = await res.json();
+        alert(d.error || "Failed to delete submission.");
+      }
+    } catch {
+      alert("Network error deleting submission.");
+    }
+  };
+
   // Send Admin Chat Typing Status
   const sendAdminTypingStatus = async (isTyping: boolean) => {
     if (!activeChatId) return;
@@ -558,6 +715,10 @@ export default function AdminPortal() {
         (submissionFilter === "withdraw" && (s.type === "withdraw" || s.type === "withdrawal")) ||
         s.status === submissionFilter;
 
+      const matchesUser =
+        submissionUserFilter === "all" ||
+        s.username.toLowerCase() === submissionUserFilter.toLowerCase();
+
       const term = submissionSearch.toLowerCase();
       const matchesSearch =
         !term ||
@@ -567,9 +728,9 @@ export default function AdminPortal() {
         s.method.toLowerCase().includes(term) ||
         s.totalUsd.toLowerCase().includes(term);
 
-      return matchesType && matchesSearch;
+      return matchesType && matchesUser && matchesSearch;
     });
-  }, [submissionsList, submissionFilter, submissionSearch]);
+  }, [submissionsList, submissionFilter, submissionUserFilter, submissionSearch]);
 
   // Filtered Logs
   const filteredLogs = useMemo(() => {
@@ -1437,21 +1598,44 @@ export default function AdminPortal() {
       {/* ----------------------------------------------------------------- */}
       {activeTab === "submissions" && (
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+          <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3">
             <div>
               <h2 className="text-lg font-bold text-white flex items-center gap-2">
                 <ArrowUpRight className="w-5 h-5 text-brand" /> User Submissions & Inputs ({submissionsList.length})
               </h2>
               <p className="text-xs text-muted-foreground">
-                View all details users inputted across Deposit, Withdrawal, and Banking requests.
+                View, create, edit, approve, or delete all Deposit and Withdrawal requests per user.
               </p>
             </div>
 
-            <div className="flex items-center gap-2 w-full sm:w-auto">
+            <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
+              <button
+                type="button"
+                onClick={() => {
+                  setNewDepositUser(usersList[0]?.username || "");
+                  setIsCreateDepositOpen(true);
+                }}
+                className="px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-xs font-bold transition-all shadow-md shadow-emerald-500/20 flex items-center gap-1.5 cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Create Deposit</span>
+              </button>
+
+              <select
+                value={submissionUserFilter}
+                onChange={(e) => setSubmissionUserFilter(e.target.value)}
+                className="bg-black/40 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-brand cursor-pointer"
+              >
+                <option value="all">All Accounts</option>
+                {usersList.map((u) => (
+                  <option key={u.username} value={u.username}>User: {u.username}</option>
+                ))}
+              </select>
+
               <select
                 value={submissionFilter}
                 onChange={(e) => setSubmissionFilter(e.target.value as any)}
-                className="bg-black/40 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-brand"
+                className="bg-black/40 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-brand cursor-pointer"
               >
                 <option value="all">All Types & Status</option>
                 <option value="deposit">Deposits Only</option>
@@ -1461,7 +1645,7 @@ export default function AdminPortal() {
                 <option value="Cancelled">Cancelled Only</option>
               </select>
 
-              <div className="relative flex-1 sm:w-60">
+              <div className="relative flex-1 sm:w-56">
                 <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                 <input
                   type="text"
@@ -1492,7 +1676,7 @@ export default function AdminPortal() {
                   {filteredSubmissions.length === 0 ? (
                     <tr>
                       <td colSpan={7} className="text-center py-12 text-muted-foreground text-xs">
-                        No submissions matching filter.
+                        No submissions matching filter. Click &quot;Create Deposit&quot; to add one.
                       </td>
                     </tr>
                   ) : (
@@ -1537,7 +1721,12 @@ export default function AdminPortal() {
                                   Code: {sub.details.withdrawalCode}
                                 </span>
                               )}
-                              {!sub.details.walletAddress && !sub.details.bankName && !sub.details.withdrawalCode && (
+                              {sub.details.adminNote && (
+                                <span className="block text-[10px] text-brand truncate">
+                                  Note: {sub.details.adminNote}
+                                </span>
+                              )}
+                              {!sub.details.walletAddress && !sub.details.bankName && !sub.details.withdrawalCode && !sub.details.adminNote && (
                                 <span className="text-muted-foreground italic">Standard submission</span>
                               )}
                             </div>
@@ -1559,8 +1748,8 @@ export default function AdminPortal() {
                             {sub.status !== "Approved" && (
                               <button
                                 onClick={() => handleUpdateSubmissionStatus(sub.id, "Approved")}
-                                title="Approve"
-                                className="p-1.5 bg-emerald-500/15 hover:bg-emerald-500/30 text-emerald-400 rounded transition-colors"
+                                title="Approve & Credit Balance"
+                                className="p-1.5 bg-emerald-500/15 hover:bg-emerald-500/30 text-emerald-400 rounded transition-colors cursor-pointer"
                               >
                                 <Check className="w-3.5 h-3.5" />
                               </button>
@@ -1569,16 +1758,30 @@ export default function AdminPortal() {
                               <button
                                 onClick={() => handleUpdateSubmissionStatus(sub.id, "Cancelled")}
                                 title="Reject / Cancel"
-                                className="p-1.5 bg-red-500/15 hover:bg-red-500/30 text-red-400 rounded transition-colors"
+                                className="p-1.5 bg-red-500/15 hover:bg-red-500/30 text-red-400 rounded transition-colors cursor-pointer"
                               >
                                 <XCircle className="w-3.5 h-3.5" />
                               </button>
                             )}
                             <button
+                              onClick={() => openEditSubmission(sub)}
+                              title="Edit Deposit"
+                              className="p-1.5 bg-brand/15 hover:bg-brand/30 text-brand rounded transition-colors cursor-pointer"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                            <button
                               onClick={() => setInspectSubmission(sub)}
-                              className="px-2 py-1 bg-white/10 hover:bg-white/20 text-white rounded text-[11px] transition-colors"
+                              className="px-2 py-1 bg-white/10 hover:bg-white/20 text-white rounded text-[11px] transition-colors cursor-pointer"
                             >
                               Inspect
+                            </button>
+                            <button
+                              onClick={() => handleDeleteSubmission(sub.id, sub.reference)}
+                              title="Delete Submission"
+                              className="p-1.5 bg-red-500/10 hover:bg-red-500/25 text-red-400 rounded transition-colors cursor-pointer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
                             </button>
                           </div>
                         </td>
@@ -1587,6 +1790,10 @@ export default function AdminPortal() {
                   )}
                 </tbody>
               </table>
+            </div>
+          </GlassCard>
+        </motion.div>
+      )}
             </div>
           </GlassCard>
         </motion.div>
@@ -2062,7 +2269,7 @@ export default function AdminPortal() {
                 <h3 className="font-bold text-base text-white flex items-center gap-2">
                   <ArrowUpRight className="w-5 h-5 text-brand" /> Submission Details
                 </h3>
-                <button onClick={() => setInspectSubmission(null)} className="text-muted-foreground hover:text-white">
+                <button onClick={() => setInspectSubmission(null)} className="text-muted-foreground hover:text-white cursor-pointer">
                   <XCircle className="w-5 h-5" />
                 </button>
               </div>
@@ -2106,26 +2313,359 @@ export default function AdminPortal() {
                 )}
               </div>
 
-              <div className="flex gap-2 pt-3">
+              <div className="flex flex-wrap gap-2 pt-3">
                 <button
+                  type="button"
                   onClick={() => {
-                    handleUpdateSubmissionStatus(inspectSubmission.id, "Approved");
+                    const sub = inspectSubmission;
                     setInspectSubmission(null);
+                    openEditSubmission(sub);
                   }}
-                  className="flex-1 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-bold text-xs transition-colors"
+                  className="flex-1 py-2 bg-brand/20 hover:bg-brand/30 text-brand border border-brand/30 rounded-xl font-bold text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                 >
-                  Approve Submission
+                  <Pencil className="w-3.5 h-3.5" /> Edit Record
                 </button>
+                {inspectSubmission.status !== "Approved" && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleUpdateSubmissionStatus(inspectSubmission.id, "Approved");
+                      setInspectSubmission(null);
+                    }}
+                    className="flex-1 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-bold text-xs transition-colors cursor-pointer"
+                  >
+                    Approve
+                  </button>
+                )}
+                {inspectSubmission.status !== "Cancelled" && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleUpdateSubmissionStatus(inspectSubmission.id, "Cancelled");
+                      setInspectSubmission(null);
+                    }}
+                    className="flex-1 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-bold text-xs transition-colors cursor-pointer"
+                  >
+                    Reject
+                  </button>
+                )}
                 <button
+                  type="button"
                   onClick={() => {
-                    handleUpdateSubmissionStatus(inspectSubmission.id, "Cancelled");
-                    setInspectSubmission(null);
+                    const id = inspectSubmission.id;
+                    const ref = inspectSubmission.reference;
+                    handleDeleteSubmission(id, ref);
                   }}
-                  className="flex-1 py-2 bg-red-500 hover:bg-red-600 text-white rounded-xl font-bold text-xs transition-colors"
+                  className="p-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30 rounded-xl transition-colors cursor-pointer"
+                  title="Delete Submission"
                 >
-                  Reject / Cancel
+                  <Trash2 className="w-4 h-4" />
                 </button>
               </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ----------------------------------------------------------------- */}
+      {/* MODAL: CREATE DEPOSIT / SUBMISSION FOR ANY USER */}
+      {/* ----------------------------------------------------------------- */}
+      <AnimatePresence>
+        {isCreateDepositOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="w-full max-w-lg bg-slate-900 border border-white/15 rounded-2xl p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto"
+            >
+              <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                <h3 className="font-bold text-base text-white flex items-center gap-2">
+                  <Plus className="w-5 h-5 text-emerald-400" /> Create Deposit / Ledger Record
+                </h3>
+                <button onClick={() => setIsCreateDepositOpen(false)} className="text-muted-foreground hover:text-white cursor-pointer">
+                  <XCircle className="w-5 h-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleCreateDepositSubmit} className="space-y-3.5 text-xs">
+                <div>
+                  <label className="block text-muted-foreground font-semibold mb-1">Target User Account</label>
+                  <select
+                    value={newDepositUser}
+                    onChange={(e) => setNewDepositUser(e.target.value)}
+                    className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-brand cursor-pointer"
+                    required
+                  >
+                    <option value="">-- Select User --</option>
+                    {usersList.map((u) => (
+                      <option key={u.username} value={u.username}>
+                        {u.username} ({u.email || "No Email"})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-muted-foreground font-semibold mb-1">Entry Type</label>
+                    <select
+                      value={newDepositType}
+                      onChange={(e) => setNewDepositType(e.target.value as any)}
+                      className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-brand cursor-pointer"
+                    >
+                      <option value="deposit">Deposit</option>
+                      <option value="withdraw">Withdrawal</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-muted-foreground font-semibold mb-1">Status</label>
+                    <select
+                      value={newDepositStatus}
+                      onChange={(e) => setNewDepositStatus(e.target.value as any)}
+                      className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-brand cursor-pointer"
+                    >
+                      <option value="Approved">Approved (Completed)</option>
+                      <option value="Pending">Pending</option>
+                      <option value="Cancelled">Cancelled</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-muted-foreground font-semibold mb-1">Amount Value</label>
+                    <input
+                      type="number"
+                      step="any"
+                      placeholder="e.g. 500.00"
+                      value={newDepositAmount}
+                      onChange={(e) => setNewDepositAmount(e.target.value)}
+                      className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-white placeholder-muted-foreground focus:outline-none focus:border-brand"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-muted-foreground font-semibold mb-1">Asset Currency</label>
+                    <select
+                      value={newDepositAsset}
+                      onChange={(e) => setNewDepositAsset(e.target.value)}
+                      className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-brand cursor-pointer"
+                    >
+                      <option value="USDT">USDT (Tether)</option>
+                      <option value="BTC">BTC (Bitcoin)</option>
+                      <option value="ETH">ETH (Ethereum)</option>
+                      <option value="SOL">SOL (Solana)</option>
+                      <option value="USD">USD (Fiat)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-muted-foreground font-semibold mb-1">Payment Method Description</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Bitcoin Network, Bank Wire, Visa/Mastercard"
+                    value={newDepositMethod}
+                    onChange={(e) => setNewDepositMethod(e.target.value)}
+                    className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-white placeholder-muted-foreground focus:outline-none focus:border-brand"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-muted-foreground font-semibold mb-1">Reference ID (Leave blank to auto-generate)</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. DEP-918230"
+                    value={newDepositRef}
+                    onChange={(e) => setNewDepositRef(e.target.value)}
+                    className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-white font-mono placeholder-muted-foreground focus:outline-none focus:border-brand"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-muted-foreground font-semibold mb-1">Admin Notes / Payload</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Verified blockchain txhash, manual administrative credit"
+                    value={newDepositNote}
+                    onChange={(e) => setNewDepositNote(e.target.value)}
+                    className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-white placeholder-muted-foreground focus:outline-none focus:border-brand"
+                  />
+                </div>
+
+                {newDepositStatus === "Approved" && newDepositType === "deposit" && (
+                  <label className="flex items-center gap-2 p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={newDepositCreditBalance}
+                      onChange={(e) => setNewDepositCreditBalance(e.target.checked)}
+                      className="w-4 h-4 rounded text-brand focus:ring-brand"
+                    />
+                    <span className="text-xs text-emerald-300 font-medium">
+                      Also automatically credit user&apos;s live account balance with this amount
+                    </span>
+                  </label>
+                )}
+
+                <div className="flex gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsCreateDepositOpen(false)}
+                    className="flex-1 py-2.5 bg-white/5 hover:bg-white/10 text-slate-300 rounded-xl font-bold transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isCreatingDeposit}
+                    className="flex-1 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-bold transition-all shadow-md shadow-emerald-500/20 disabled:opacity-50 cursor-pointer"
+                  >
+                    {isCreatingDeposit ? "Saving..." : "Create Deposit Record"}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ----------------------------------------------------------------- */}
+      {/* MODAL: EDIT SUBMISSION / DEPOSIT RECORD */}
+      {/* ----------------------------------------------------------------- */}
+      <AnimatePresence>
+        {isEditDepositOpen && editingSubmission && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="w-full max-w-lg bg-slate-900 border border-white/15 rounded-2xl p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto"
+            >
+              <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                <h3 className="font-bold text-base text-white flex items-center gap-2">
+                  <Pencil className="w-5 h-5 text-brand" /> Edit Submission Record ({editingSubmission.reference})
+                </h3>
+                <button onClick={() => setIsEditDepositOpen(false)} className="text-muted-foreground hover:text-white cursor-pointer">
+                  <XCircle className="w-5 h-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveEditSubmission} className="space-y-3.5 text-xs">
+                <div className="p-3 bg-black/40 rounded-xl border border-white/5 flex items-center justify-between">
+                  <div>
+                    <span className="text-muted-foreground text-[10px] uppercase block font-semibold">User Account</span>
+                    <span className="font-bold text-white text-sm">{editingSubmission.username}</span>
+                  </div>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-brand/20 text-brand uppercase">
+                    {editingSubmission.type}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-muted-foreground font-semibold mb-1">Amount Value</label>
+                    <input
+                      type="text"
+                      value={editAmountVal}
+                      onChange={(e) => setEditAmountVal(e.target.value)}
+                      className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-brand"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-muted-foreground font-semibold mb-1">Asset Currency</label>
+                    <input
+                      type="text"
+                      value={editAmountAsset}
+                      onChange={(e) => setEditAmountAsset(e.target.value)}
+                      className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-brand"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-muted-foreground font-semibold mb-1">Total (USD)</label>
+                    <input
+                      type="text"
+                      value={editTotalUsd}
+                      onChange={(e) => setEditTotalUsd(e.target.value)}
+                      className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-brand"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-muted-foreground font-semibold mb-1">Status</label>
+                    <select
+                      value={editStatus}
+                      onChange={(e) => setEditStatus(e.target.value as any)}
+                      className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-brand cursor-pointer"
+                    >
+                      <option value="Approved">Approved</option>
+                      <option value="Pending">Pending</option>
+                      <option value="Cancelled">Cancelled</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-muted-foreground font-semibold mb-1">Payment Method</label>
+                  <input
+                    type="text"
+                    value={editMethod}
+                    onChange={(e) => setEditMethod(e.target.value)}
+                    className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-brand"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-muted-foreground font-semibold mb-1">Reference ID</label>
+                  <input
+                    type="text"
+                    value={editReference}
+                    onChange={(e) => setEditReference(e.target.value)}
+                    className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-brand"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-muted-foreground font-semibold mb-1">Admin Notes</label>
+                  <textarea
+                    rows={2}
+                    value={editNote}
+                    onChange={(e) => setEditNote(e.target.value)}
+                    className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-brand resize-none"
+                    placeholder="Admin explanation or status note..."
+                  />
+                </div>
+
+                <div className="flex gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteSubmission(editingSubmission.id, editingSubmission.reference)}
+                    className="p-2.5 bg-red-500/15 hover:bg-red-500/30 text-red-400 border border-red-500/30 rounded-xl font-bold transition-colors flex items-center justify-center gap-1 cursor-pointer"
+                    title="Delete permanently"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsEditDepositOpen(false)}
+                    className="flex-1 py-2.5 bg-white/5 hover:bg-white/10 text-slate-300 rounded-xl font-bold transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSavingEdit}
+                    className="flex-1 py-2.5 bg-brand hover:bg-brand/90 text-white rounded-xl font-bold transition-all shadow-md shadow-brand/20 disabled:opacity-50 cursor-pointer"
+                  >
+                    {isSavingEdit ? "Saving..." : "Save Changes"}
+                  </button>
+                </div>
+              </form>
             </motion.div>
           </div>
         )}

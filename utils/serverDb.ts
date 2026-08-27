@@ -344,6 +344,34 @@ export const updateSubmissionStatus = (id: string, status: "Approved" | "Pending
   return submissions[index];
 };
 
+export const deleteSubmission = (id: string): boolean => {
+  ensureDataFolder();
+  const submissions = getSubmissions();
+  const filtered = submissions.filter((s) => s.id !== id);
+  if (filtered.length === submissions.length) return false;
+  saveSubmissions(filtered);
+  return true;
+};
+
+export const updateSubmission = (id: string, updates: Partial<Submission>): Submission | null => {
+  ensureDataFolder();
+  const submissions = getSubmissions();
+  const index = submissions.findIndex((s) => s.id === id);
+  if (index === -1) return null;
+
+  submissions[index] = {
+    ...submissions[index],
+    ...updates,
+    details: {
+      ...(submissions[index].details || {}),
+      ...(updates.details || {}),
+      updatedAt: new Date().toISOString(),
+    },
+  };
+  saveSubmissions(submissions);
+  return submissions[index];
+};
+
 export const updateUserBalance = (
   username: string,
   operation: "add" | "deduct" | "set",
