@@ -49,7 +49,13 @@ export default function Topbar() {
     setKycLevel 
   } = useApp();
 
-  if (isLoading || !user || pathname === "/signin" || pathname === "/signup") {
+  if (
+    isLoading || 
+    !user || 
+    pathname === "/signin" || 
+    pathname === "/signup" || 
+    pathname?.startsWith("/admin")
+  ) {
     return null;
   }
 

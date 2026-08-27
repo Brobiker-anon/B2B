@@ -192,6 +192,13 @@ export interface ChatMessage {
   senderType: "user" | "admin";
 }
 
+export interface TypingStatus {
+  user?: boolean;
+  admin?: boolean;
+  userLastTyped?: number;
+  adminLastTyped?: number;
+}
+
 export interface SupportChat {
   id: string;
   name: string;
@@ -201,6 +208,7 @@ export interface SupportChat {
   status: "Online" | "Offline";
   messages: ChatMessage[];
   lastUpdated: string;
+  typing?: TypingStatus;
 }
 
 export const getChats = (): SupportChat[] => {

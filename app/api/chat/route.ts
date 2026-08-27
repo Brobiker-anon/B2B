@@ -81,6 +81,16 @@ function createUserChat(username: string): SupportChat {
   };
 }
 
+function cleanTyping(chat: SupportChat) {
+  const now = Date.now();
+  const userTyping = Boolean(chat.typing?.user && (now - (chat.typing?.userLastTyped || 0)) < 3500);
+  const adminTyping = Boolean(chat.typing?.admin && (now - (chat.typing?.adminLastTyped || 0)) < 3500);
+  return {
+    user: userTyping,
+    admin: adminTyping,
+  };
+}
+
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -92,7 +102,11 @@ export async function GET(request: Request) {
       username: loggedInUsername,
     } = await getSession();
 
-    const chats = getChats();
+    const rawChats = getChats();
+    const chats = rawChats.map((c) => ({
+      ...c,
+      typing: cleanTyping(c),
+    }));
 
     // If requested with all=true or by Admin panel requesting list
     if (fetchAll || (isAdmin && !activeUsername && !searchParams.get("self"))) {
@@ -105,7 +119,7 @@ export async function GET(request: Request) {
 
     const targetUsername = activeUsername || loggedInUsername || "Guest";
 
-    let userChat = chats.find(
+    let userChat = rawChats.find(
       (chat) =>
         chat.username.toLowerCase() === targetUsername.toLowerCase() ||
         chat.id === `chat_${targetUsername.toLowerCase().replace(/\s+/g, "_")}`
@@ -113,17 +127,20 @@ export async function GET(request: Request) {
 
     if (!userChat) {
       userChat = createUserChat(targetUsername);
-      chats.push(userChat);
-      saveChats(chats);
+      rawChats.push(userChat);
+      saveChats(rawChats);
     } else {
       userChat.status = "Online";
-      saveChats(chats);
+      saveChats(rawChats);
     }
 
     return NextResponse.json({
       success: true,
       isAdmin,
-      chat: userChat,
+      chat: {
+        ...userChat,
+        typing: cleanTyping(userChat),
+      },
       chats: isAdmin ? chats : undefined,
     });
   } catch (error) {
@@ -142,6 +159,38 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
+
+    // Handle typing status notification
+    if (body.action === "typing") {
+      const { chatId, username: bodyUsername, senderType, isTyping } = body;
+      const chats = getChats();
+      const targetChatId = chatId || (bodyUsername ? `chat_${bodyUsername.toLowerCase().replace(/\s+/g, "_")}` : null);
+
+      let chat = chats.find(
+        (c) => c.id === targetChatId || (bodyUsername && c.username.toLowerCase() === bodyUsername.toLowerCase())
+      );
+
+      if (!chat && bodyUsername) {
+        chat = createUserChat(bodyUsername);
+        chats.push(chat);
+      }
+
+      if (chat) {
+        const typeKey = senderType === "admin" ? "admin" : "user";
+        const timeKey = senderType === "admin" ? "adminLastTyped" : "userLastTyped";
+        chat.typing = {
+          ...(chat.typing || {}),
+          [typeKey]: Boolean(isTyping),
+          [timeKey]: isTyping ? Date.now() : 0,
+        };
+        saveChats(chats);
+      }
+
+      return NextResponse.json({
+        success: true,
+        typing: chat ? cleanTyping(chat) : {},
+      });
+    }
 
     const {
       chatId,
@@ -229,6 +278,11 @@ export async function POST(request: Request) {
       targetChat.messages.push(newMessage);
       targetChat.lastUpdated = new Date().toISOString();
       targetChat.status = "Online";
+      targetChat.typing = {
+        ...(targetChat.typing || {}),
+        admin: false,
+        adminLastTyped: 0,
+      };
 
       saveChats(chats);
 
@@ -257,7 +311,10 @@ export async function POST(request: Request) {
       return NextResponse.json({
         success: true,
         message: newMessage,
-        chat: targetChat,
+        chat: {
+          ...targetChat,
+          typing: cleanTyping(targetChat),
+        },
       });
     }
 
@@ -294,6 +351,11 @@ export async function POST(request: Request) {
     userChat.messages.push(newMessage);
     userChat.lastUpdated = new Date().toISOString();
     userChat.status = "Online";
+    userChat.typing = {
+      ...(userChat.typing || {}),
+      user: false,
+      userLastTyped: 0,
+    };
 
     saveChats(chats);
 
@@ -322,7 +384,10 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       message: newMessage,
-      chat: userChat,
+      chat: {
+        ...userChat,
+        typing: cleanTyping(userChat),
+      },
     });
   } catch (error) {
     console.error("POST /api/chat error:", error);

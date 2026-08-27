@@ -7,7 +7,7 @@ import { AppProvider } from "@/context/AppContext";
 import ToastContainer from "@/components/layout/ToastContainer";
 
 export const metadata: Metadata = {
-  title: "B2B Brokerage Platform",
+  title: "ApexVeltrix",
   description: "Premium fintech dashboard and modern brokerage platform",
 };
 

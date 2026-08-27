@@ -52,7 +52,13 @@ export default function Sidebar() {
   const pathname = usePathname();
   const { user, isLoading } = useApp();
 
-  if (isLoading || !user || pathname === "/signin" || pathname === "/signup") {
+  if (
+    isLoading || 
+    !user || 
+    pathname === "/signin" || 
+    pathname === "/signup" || 
+    pathname?.startsWith("/admin")
+  ) {
     return null;
   }
 
