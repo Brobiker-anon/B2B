@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import GlassCard from "@/components/ui/GlassCard";
@@ -16,7 +16,8 @@ import {
   MessageSquare,
   ArrowLeft,
   X,
-  ChevronDown
+  ChevronDown,
+  RefreshCw
 } from "lucide-react";
 import { useApp } from "@/context/AppContext";
 
@@ -32,55 +33,120 @@ interface DepositRecord {
   status: "Approved" | "Pending" | "Cancelled";
 }
 
+const CRYPTO_OPTIONS: Record<string, { name: string; symbol: string; address: string; networks: string[]; qrImage?: string; warning: string }> = {
+  BTC: {
+    name: "BTC (Bitcoin)",
+    symbol: "BTC",
+    address: "bc1q8e7t6seq2unu2s75nhrlv0clpk9twcd0wj5zrq",
+    networks: ["Bitcoin (Native SegWit)", "Bitcoin (Legacy)"],
+    qrImage: "/images/btc-qr.png",
+    warning: "Only send BTC (Bitcoin) to this address via the Bitcoin network. Sending any other asset will result in permanent loss.",
+  },
+  USDT: {
+    name: "USDT (Tether)",
+    symbol: "USDT",
+    address: "TYB2k3c9xjL2p8vN7mQ4wS1dE5fG6hJ8kL",
+    networks: ["TRC20 (Tron)", "ERC20 (Ethereum)", "BEP20 (BNB Smart Chain)", "Polygon"],
+    warning: "Only send USDT to this address via the selected network. Sending any other asset will result in permanent loss.",
+  },
+  ETH: {
+    name: "ETH (Ethereum)",
+    symbol: "ETH",
+    address: "0x71C8A6B3dF5b828bF97E720e1F0C9d72F4Bc1294",
+    networks: ["ERC20 (Ethereum Mainnet)", "Arbitrum One", "Optimism"],
+    warning: "Only send ETH or ERC-20 assets to this address via Ethereum network.",
+  },
+  SOL: {
+    name: "SOL (Solana)",
+    symbol: "SOL",
+    address: "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU",
+    networks: ["Solana Mainnet"],
+    warning: "Only send SOL to this address via Solana SPL network.",
+  },
+};
+
 export default function Deposit() {
+  const { user, kycLevel, setKycLevel, addToast } = useApp();
   const [viewMode, setViewMode] = useState<"history" | "form">("history");
   const [method, setMethod] = useState("crypto");
   const [copied, setCopied] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
-  
-  const { kycLevel, setKycLevel, addToast } = useApp();
+  const [depositRecords, setDepositRecords] = useState<DepositRecord[]>([]);
+  const [loadingDeposits, setLoadingDeposits] = useState(true);
 
-  const [depositRecords, setDepositRecords] = useState<DepositRecord[]>([
-    {
-      id: "1",
-      date: "55 seconds ago",
-      reference: "G1gH63256",
-      method: "BTC",
-      type: "Regular",
-      amountVal: "0.00001",
-      amountAsset: "BTC",
-      totalUsd: "$0.856",
-      status: "Pending",
-    },
-    {
-      id: "2",
-      date: "1 month ago",
-      reference: "42iK1587",
-      method: "BTC",
-      type: "Regular",
-      amountVal: "0.0087",
-      amountAsset: "BTC",
-      totalUsd: "$682.45",
-      status: "Approved",
-    },
-    {
-      id: "3",
-      date: "1 month ago",
-      reference: "42iK49234",
-      method: "BTC",
-      type: "Regular",
-      amountVal: "0.0062",
-      amountAsset: "BTC",
-      totalUsd: "$486.20",
-      status: "Approved",
-    },
-  ]);
+  // Form states
+  const [cryptoAsset, setCryptoAsset] = useState("BTC");
+  const [selectedNetwork, setSelectedNetwork] = useState(CRYPTO_OPTIONS["BTC"].networks[0]);
+  const [cryptoAmount, setCryptoAmount] = useState("");
+  const [cardHolder, setCardHolder] = useState("");
+  const [cardNumber, setCardNumber] = useState("");
+  const [cardExpiry, setCardExpiry] = useState("");
+  const [cardCvv, setCardCvv] = useState("");
+  const [cardAmount, setCardAmount] = useState("1000.00");
+  const [submittingDeposit, setSubmittingDeposit] = useState(false);
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText("TYB2k3c...9xjL2p");
+  const currentCrypto = CRYPTO_OPTIONS[cryptoAsset] || CRYPTO_OPTIONS["BTC"];
+
+  // Live Sync Deposit Records with Server DB
+  const fetchDeposits = useCallback(async () => {
+    if (!user?.username) {
+      setLoadingDeposits(false);
+      return;
+    }
+    try {
+      const res = await fetch(`/api/submissions?username=${encodeURIComponent(user.username)}&type=deposit`, {
+        cache: "no-store",
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.submissions)) {
+          const records: DepositRecord[] = data.submissions.map((s: any) => {
+            let dateStr = "Just now";
+            if (s.createdAt) {
+              const diffMs = Date.now() - new Date(s.createdAt).getTime();
+              const diffSec = Math.floor(diffMs / 1000);
+              const diffMin = Math.floor(diffSec / 60);
+              const diffHrs = Math.floor(diffMin / 60);
+              const diffDays = Math.floor(diffHrs / 24);
+              if (diffSec < 60) dateStr = `${Math.max(1, diffSec)} seconds ago`;
+              else if (diffMin < 60) dateStr = `${diffMin} minute${diffMin === 1 ? "" : "s"} ago`;
+              else if (diffHrs < 24) dateStr = `${diffHrs} hour${diffHrs === 1 ? "" : "s"} ago`;
+              else dateStr = `${diffDays} day${diffDays === 1 ? "" : "s"} ago`;
+            }
+            return {
+              id: s.id,
+              date: dateStr,
+              reference: s.reference,
+              method: s.method,
+              type: s.details?.type || "Regular",
+              amountVal: s.amountVal,
+              amountAsset: s.amountAsset || s.method,
+              totalUsd: s.totalUsd?.startsWith("$") ? s.totalUsd : `$${s.totalUsd}`,
+              status: s.status || "Pending",
+            };
+          });
+          setDepositRecords(records);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to load user deposit records:", err);
+    } finally {
+      setLoadingDeposits(false);
+    }
+  }, [user?.username]);
+
+  useEffect(() => {
+    fetchDeposits();
+    const interval = setInterval(fetchDeposits, 2500); // Continuous live sync with admin actions
+    return () => clearInterval(interval);
+  }, [fetchDeposits]);
+
+  const handleCopy = (textToCopy?: string) => {
+    const targetText = textToCopy || currentCrypto.address;
+    navigator.clipboard.writeText(targetText);
     setCopied(true);
-    addToast("Address copied to clipboard!", "success");
+    addToast(`${currentCrypto.symbol} deposit address copied to clipboard!`, "success");
     setTimeout(() => setCopied(false), 2000);
   };
 
@@ -89,21 +155,33 @@ export default function Deposit() {
     addToast("KYC Level 2 Identity Verification Approved successfully!", "success");
   };
 
-  const handleNewDepositSubmit = async (amount: string, methodType: string) => {
+  const handleNewDepositSubmit = async (amount: string, methodType: string, assetSymbol: string = "BTC") => {
+    if (!user?.username) {
+      addToast("Please sign in to submit a deposit.", "error");
+      return;
+    }
+
+    const rawAmt = amount || (assetSymbol === "BTC" ? "0.05" : "500.00");
+    const refCode = "G1gH" + Math.floor(10000 + Math.random() * 90000);
+    const usdVal = (parseFloat(rawAmt) * (assetSymbol === "BTC" ? 63000 : 1)).toFixed(2);
+    const totalUsdStr = `$${usdVal}`;
+
     const newRecord: DepositRecord = {
-      id: Date.now().toString(),
+      id: `temp-${Date.now()}`,
       date: "Just now",
-      reference: "G1gH" + Math.floor(10000 + Math.random() * 90000),
+      reference: refCode,
       method: methodType.toUpperCase(),
       type: "Regular",
-      amountVal: amount || "0.00001",
-      amountAsset: methodType.toUpperCase(),
-      totalUsd: "$" + (parseFloat(amount || "0.00001") * 63000).toFixed(3),
+      amountVal: rawAmt,
+      amountAsset: assetSymbol.toUpperCase(),
+      totalUsd: totalUsdStr,
       status: "Pending",
     };
-    setDepositRecords([newRecord, ...depositRecords]);
-    addToast("Deposit request submitted and currently pending!", "success");
+
+    setDepositRecords((prev) => [newRecord, ...prev]);
+    addToast("Deposit request submitted and currently pending approval!", "success");
     setViewMode("history");
+    setSubmittingDeposit(true);
 
     try {
       await fetch("/api/submissions", {
@@ -111,6 +189,8 @@ export default function Deposit() {
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          username: user.username,
+          email: user.email || "",
           type: "deposit",
           reference: newRecord.reference,
           method: newRecord.method,
@@ -118,11 +198,20 @@ export default function Deposit() {
           amountAsset: newRecord.amountAsset,
           totalUsd: newRecord.totalUsd,
           status: "Pending",
-          details: { type: newRecord.type, submittedAt: new Date().toISOString() },
+          details: { 
+            type: newRecord.type, 
+            submittedAt: new Date().toISOString(),
+            methodCategory: method,
+            depositAddress: currentCrypto.address,
+            network: selectedNetwork,
+          },
         }),
       });
+      fetchDeposits();
     } catch (err) {
       console.error("Failed to persist deposit submission:", err);
+    } finally {
+      setSubmittingDeposit(false);
     }
   };
 
@@ -150,35 +239,41 @@ export default function Deposit() {
             transition={{ duration: 0.3 }}
             className="space-y-6"
           >
-            {/* Header controls matching screenshot */}
-            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
-              <div className="flex items-center gap-4">
+            {/* Top Bar matching reference */}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <div>
                 <h1 className="text-2xl font-bold tracking-tight text-white">Deposits</h1>
+                <p className="text-xs text-muted-foreground mt-1">Live synchronized deposit ledger and transaction records</p>
+              </div>
+              <div className="flex items-center gap-3 w-full sm:w-auto">
                 <button
                   onClick={() => setViewMode("form")}
-                  className="px-4 py-2 bg-[#00a3ff] hover:bg-[#0090e0] text-white rounded-lg text-sm font-medium flex items-center gap-2 cursor-pointer transition-all shadow-md shadow-blue-500/10 active:scale-95"
+                  className="px-5 py-2.5 bg-[#00a3ff] hover:bg-[#0090e0] text-white rounded-lg text-xs font-bold transition-all shadow-md shadow-blue-500/10 cursor-pointer flex items-center justify-center gap-2 flex-1 sm:flex-initial"
                 >
-                  <CreditCard className="w-4 h-4" />
                   <span>Deposit now</span>
                 </button>
-              </div>
-
-              <div className="flex items-center gap-2 w-full sm:w-auto">
-                <div className="relative flex-1 sm:flex-initial">
-                  <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                  <input
-                    type="text"
+                <button
+                  onClick={fetchDeposits}
+                  title="Sync Deposits"
+                  className="p-2.5 bg-[#0d0e12] border border-[#1e2028] hover:border-gray-500 rounded-lg text-muted-foreground hover:text-white transition-colors cursor-pointer"
+                >
+                  <RefreshCw className={`w-4 h-4 ${loadingDeposits ? 'animate-spin' : ''}`} />
+                </button>
+                <div className="relative flex-1 sm:w-64">
+                  <Search className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input 
+                    type="text" 
                     placeholder="Search for deposits"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="bg-[#0d0e12] border border-[#1e2028] rounded-lg pl-9 pr-4 py-2 text-xs focus:outline-none focus:border-gray-500 w-full text-white transition-colors"
+                    className="w-full bg-[#0d0e12] border border-[#1e2028] rounded-lg pl-9 pr-4 py-2 text-base md:text-xs text-white placeholder:text-gray-500 focus:outline-none focus:border-gray-500 transition-colors"
                   />
                 </div>
                 <div className="relative">
-                  <select
+                  <select 
                     value={statusFilter}
                     onChange={(e) => setStatusFilter(e.target.value)}
-                    className="bg-[#0d0e12] border border-[#1e2028] rounded-lg px-4 py-2 text-xs text-white focus:outline-none focus:border-gray-500 appearance-none pr-8 cursor-pointer font-medium"
+                    className="bg-[#0d0e12] border border-[#1e2028] rounded-lg px-4 py-2 text-base md:text-xs text-white focus:outline-none focus:border-gray-500 appearance-none pr-8 cursor-pointer font-medium"
                   >
                     <option value="All">All</option>
                     <option value="Approved">Approved</option>
@@ -209,20 +304,20 @@ export default function Deposit() {
                     {filteredRecords.length === 0 ? (
                       <tr>
                         <td colSpan={7} className="text-center py-12 text-xs text-muted-foreground">
-                          No deposits found matching search filter.
+                          {loadingDeposits ? "Syncing deposit history..." : "No deposits found. Click \"Deposit now\" to initiate a deposit."}
                         </td>
                       </tr>
                     ) : (
                       filteredRecords.map((rec) => (
                         <tr key={rec.id} className="border-b border-[#1e2028]/60 hover:bg-white/[0.02] transition-colors text-xs font-normal">
                           <td className="px-6 py-5 text-gray-400">{rec.date}</td>
-                          <td className="px-6 py-5 text-gray-400">{rec.reference}</td>
+                          <td className="px-6 py-5 text-gray-400 font-mono">{rec.reference}</td>
                           <td className="px-6 py-5 text-white font-medium">{rec.method}</td>
                           <td className="px-6 py-5 text-gray-300">{rec.type}</td>
                           <td className="px-6 py-5">
                             <div className="flex items-center gap-2">
                               <span className="w-4 h-4 rounded-full bg-[#f7931a] text-black font-bold flex items-center justify-center text-[10px]">
-                                ₿
+                                {rec.amountAsset === "BTC" ? "₿" : "$"}
                               </span>
                               <span className="text-white font-semibold">{rec.amountVal} {rec.amountAsset}</span>
                             </div>
@@ -277,7 +372,7 @@ export default function Deposit() {
               </button>
             </div>
 
-            {/* Original deposit selection layout */}
+            {/* Deposit selection layout */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {[
                 { id: "crypto", icon: Wallet, title: "Crypto Deposit", desc: "Transfer from another wallet" },
@@ -307,40 +402,89 @@ export default function Deposit() {
                   <div className="space-y-4">
                     <div>
                       <label className="block text-sm font-medium text-muted-foreground mb-2">Select Asset</label>
-                      <select className="w-full bg-black/20 border border-white/10 rounded-lg px-4 py-2.5 text-white outline-none focus:border-brand transition-colors">
-                        <option>USDT (Tether)</option>
-                        <option>BTC (Bitcoin)</option>
-                        <option>ETH (Ethereum)</option>
-                        <option>SOL (Solana)</option>
+                      <select 
+                        value={cryptoAsset}
+                        onChange={(e) => {
+                          const assetKey = e.target.value;
+                          setCryptoAsset(assetKey);
+                          if (CRYPTO_OPTIONS[assetKey]) {
+                            setSelectedNetwork(CRYPTO_OPTIONS[assetKey].networks[0]);
+                          }
+                        }}
+                        className="w-full bg-black/20 border border-white/10 rounded-lg px-4 py-2.5 text-base md:text-sm text-white outline-none focus:border-brand transition-colors"
+                      >
+                        <option value="BTC">BTC (Bitcoin)</option>
+                        <option value="USDT">USDT (Tether)</option>
+                        <option value="ETH">ETH (Ethereum)</option>
+                        <option value="SOL">SOL (Solana)</option>
                       </select>
                     </div>
 
                     <div>
                       <label className="block text-sm font-medium text-muted-foreground mb-2">Select Network</label>
-                      <select className="w-full bg-black/20 border border-white/10 rounded-lg px-4 py-2.5 text-white outline-none focus:border-brand transition-colors">
-                        <option>TRC20 (Tron)</option>
-                        <option>ERC20 (Ethereum)</option>
-                        <option>BEP20 (BNB Smart Chain)</option>
-                        <option>Polygon</option>
+                      <select 
+                        value={selectedNetwork}
+                        onChange={(e) => setSelectedNetwork(e.target.value)}
+                        className="w-full bg-black/20 border border-white/10 rounded-lg px-4 py-2.5 text-base md:text-sm text-white outline-none focus:border-brand transition-colors"
+                      >
+                        {currentCrypto.networks.map((net) => (
+                          <option key={net} value={net}>{net}</option>
+                        ))}
                       </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-muted-foreground mb-2">Expected Deposit Amount ({currentCrypto.symbol})</label>
+                      <input
+                        type="number"
+                        placeholder={currentCrypto.symbol === "BTC" ? "e.g. 0.05" : "e.g. 500"}
+                        value={cryptoAmount}
+                        onChange={(e) => setCryptoAmount(e.target.value)}
+                        className="w-full bg-black/20 border border-white/10 rounded-lg px-4 py-2.5 text-base md:text-sm text-white outline-none focus:border-brand transition-colors"
+                      />
                     </div>
 
                     <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-4">
                       <p className="text-xs text-yellow-500 leading-relaxed">
-                        <strong>Warning:</strong> Only send USDT to this address via the TRC20 network. Sending any other asset or using a different network will result in permanent loss.
+                        <strong>Warning:</strong> {currentCrypto.warning}
                       </p>
                     </div>
+
+                    <button
+                      type="button"
+                      disabled={submittingDeposit}
+                      onClick={() => handleNewDepositSubmit(cryptoAmount || (currentCrypto.symbol === "BTC" ? "0.05" : "500"), "Crypto", currentCrypto.symbol)}
+                      className="w-full py-3 bg-[#00a3ff] hover:bg-[#0090e0] disabled:opacity-50 text-white rounded-lg font-bold transition-all shadow-md shadow-blue-500/10 cursor-pointer"
+                    >
+                      {submittingDeposit ? "Submitting..." : "Confirm Payment & Submit Request"}
+                    </button>
                   </div>
 
                   <div className="flex flex-col items-center justify-center p-6 border border-white/10 rounded-lg bg-black/20">
-                    <div className="bg-white p-4 rounded-xl mb-6 shadow-[0_0_30px_rgba(255,255,255,0.1)]">
-                      <QrCode className="w-40 h-40 text-black" />
+                    <div className="bg-white p-4 rounded-xl mb-6 shadow-[0_0_30px_rgba(255,255,255,0.1)] flex items-center justify-center">
+                      {currentCrypto.qrImage ? (
+                        <img 
+                          src={currentCrypto.qrImage} 
+                          alt={`${currentCrypto.symbol} Deposit QR Code`}
+                          className="w-44 h-44 object-contain rounded-lg"
+                        />
+                      ) : (
+                        <QrCode className="w-40 h-40 text-black" />
+                      )}
                     </div>
                     <div className="w-full">
-                      <label className="block text-xs font-medium text-muted-foreground mb-1 text-center">Deposit Address</label>
+                      <label className="block text-xs font-medium text-muted-foreground mb-1 text-center">
+                        Deposit Address ({currentCrypto.symbol})
+                      </label>
                       <div className="flex items-center gap-2 bg-black/40 p-3 rounded-lg border border-white/5">
-                        <code className="text-sm text-brand-glow truncate flex-1">TYB2k3c...9xjL2p</code>
-                        <button onClick={handleCopy} className="text-muted-foreground hover:text-white transition-colors">
+                        <code className="text-xs sm:text-sm text-brand-glow break-all select-all flex-1 font-mono">
+                          {currentCrypto.address}
+                        </code>
+                        <button 
+                          onClick={() => handleCopy(currentCrypto.address)} 
+                          className="text-muted-foreground hover:text-white transition-colors p-1 shrink-0 cursor-pointer"
+                          title="Copy address"
+                        >
                           {copied ? <CheckCircle2 className="w-5 h-5 text-green-500" /> : <Copy className="w-5 h-5" />}
                         </button>
                       </div>
@@ -371,30 +515,63 @@ export default function Deposit() {
                 <div className="max-w-md space-y-4">
                   <div>
                     <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Cardholder Name</label>
-                    <input type="text" placeholder="John Doe" className="w-full bg-black/20 border border-white/10 rounded-lg px-4 py-2.5 text-white outline-none focus:border-brand transition-colors" />
+                    <input 
+                      type="text" 
+                      placeholder="John Doe" 
+                      value={cardHolder}
+                      onChange={(e) => setCardHolder(e.target.value)}
+                      className="w-full bg-black/20 border border-white/10 rounded-lg px-4 py-2.5 text-base md:text-sm text-white outline-none focus:border-brand transition-colors" 
+                    />
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Card Number</label>
-                    <input type="text" placeholder="0000 0000 0000 0000" className="w-full bg-black/20 border border-white/10 rounded-lg px-4 py-2.5 text-white outline-none focus:border-brand transition-colors" />
+                    <input 
+                      type="text" 
+                      placeholder="0000 0000 0000 0000" 
+                      value={cardNumber}
+                      onChange={(e) => setCardNumber(e.target.value)}
+                      className="w-full bg-black/20 border border-white/10 rounded-lg px-4 py-2.5 text-base md:text-sm text-white outline-none focus:border-brand transition-colors" 
+                    />
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Expiry Date</label>
-                      <input type="text" placeholder="MM/YY" className="w-full bg-black/20 border border-white/10 rounded-lg px-4 py-2.5 text-white outline-none focus:border-brand transition-colors" />
+                      <input 
+                        type="text" 
+                        placeholder="MM/YY" 
+                        value={cardExpiry}
+                        onChange={(e) => setCardExpiry(e.target.value)}
+                        className="w-full bg-black/20 border border-white/10 rounded-lg px-4 py-2.5 text-base md:text-sm text-white outline-none focus:border-brand transition-colors" 
+                      />
                     </div>
                     <div>
                       <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">CVV</label>
-                      <input type="password" placeholder="***" className="w-full bg-black/20 border border-white/10 rounded-lg px-4 py-2.5 text-white outline-none focus:border-brand transition-colors" />
+                      <input 
+                        type="password" 
+                        placeholder="***" 
+                        value={cardCvv}
+                        onChange={(e) => setCardCvv(e.target.value)}
+                        className="w-full bg-black/20 border border-white/10 rounded-lg px-4 py-2.5 text-base md:text-sm text-white outline-none focus:border-brand transition-colors" 
+                      />
                     </div>
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Amount (USD)</label>
-                    <input type="number" placeholder="1000.00" className="w-full bg-black/20 border border-white/10 rounded-lg px-4 py-2.5 text-white outline-none focus:border-brand transition-colors" />
+                    <input 
+                      type="number" 
+                      placeholder="1000.00" 
+                      value={cardAmount}
+                      onChange={(e) => setCardAmount(e.target.value)}
+                      className="w-full bg-black/20 border border-white/10 rounded-lg px-4 py-2.5 text-base md:text-sm text-white outline-none focus:border-brand transition-colors" 
+                    />
                   </div>
-                  <button onClick={() => {
-                    handleNewDepositSubmit("1000.00", "Card");
-                  }} className="w-full py-3 bg-[#00a3ff] hover:bg-[#0090e0] text-white rounded-lg font-bold transition-all shadow-md shadow-blue-500/10">
-                    Submit Deposit
+                  <button 
+                    type="button"
+                    disabled={submittingDeposit}
+                    onClick={() => handleNewDepositSubmit(cardAmount || "1000.00", "Card", "USD")} 
+                    className="w-full py-3 bg-[#00a3ff] hover:bg-[#0090e0] text-white rounded-lg font-bold transition-all shadow-md shadow-blue-500/10 cursor-pointer disabled:opacity-50"
+                  >
+                    {submittingDeposit ? "Submitting..." : "Submit Deposit"}
                   </button>
                 </div>
               </GlassCard>
@@ -411,7 +588,7 @@ export default function Deposit() {
                     </div>
                     <div>
                       <p className="text-xs text-muted-foreground uppercase font-semibold mb-1">Beneficiary Name</p>
-                      <p className="text-sm font-bold text-white">BrokerageX Inc.</p>
+                      <p className="text-sm font-bold text-white">ApexVeltrix Inc.</p>
                     </div>
                     <div>
                       <p className="text-xs text-muted-foreground uppercase font-semibold mb-1">Account Number (IBAN)</p>
@@ -424,9 +601,17 @@ export default function Deposit() {
                   </div>
                   <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-4 mt-2">
                     <p className="text-xs text-yellow-500 leading-relaxed">
-                      <strong>Transfer Notice:</strong> Please include your BrokerageX username in the transfer reference memo. Transfers typically take 1-3 business days to credit to your account.
+                      <strong>Transfer Notice:</strong> Please include your ApexVeltrix username in the transfer reference memo. Transfers typically take 1-3 business days to credit to your account.
                     </p>
                   </div>
+                  <button
+                    type="button"
+                    disabled={submittingDeposit}
+                    onClick={() => handleNewDepositSubmit("2500.00", "Bank Wire", "USD")}
+                    className="w-full py-3 bg-[#00a3ff] hover:bg-[#0090e0] text-white rounded-lg font-bold transition-all shadow-md shadow-blue-500/10 cursor-pointer disabled:opacity-50"
+                  >
+                    {submittingDeposit ? "Submitting..." : "I Have Initiated Wire Transfer"}
+                  </button>
                 </div>
               </GlassCard>
             )}

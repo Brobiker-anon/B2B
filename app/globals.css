@@ -87,3 +87,21 @@
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.2);
 }
+
+/* Prevent auto-zooming on focus in iOS and mobile browsers */
+input,
+textarea,
+select {
+  font-size: 16px !important;
+  touch-action: manipulation;
+}
+
+@media (min-width: 1024px) {
+  input,
+  textarea,
+  select {
+    font-size: 14px;
+  }
+}
+
+

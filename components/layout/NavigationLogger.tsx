@@ -119,7 +119,7 @@ export default function NavigationLogger() {
         category = "referrals";
         break;
       case "/chat":
-        action = "User joined BrokerageX Community Chat lounge";
+        action = "User joined ApexVeltrix Community Chat lounge";
         category = "chat";
         break;
       case "/settings":

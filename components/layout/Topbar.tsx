@@ -346,10 +346,10 @@ export default function Topbar() {
               <div className="flex items-center justify-between h-16 px-6 border-b border-[#252830]">
                 <div className="flex items-center gap-2">
                   <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-brand to-brand-glow flex items-center justify-center text-white font-bold">
-                    B
+                    A
                   </div>
                   <span className="text-lg font-bold tracking-tight text-white">
-                    BrokerageX
+                    ApexVeltrix
                   </span>
                 </div>
                 <button 

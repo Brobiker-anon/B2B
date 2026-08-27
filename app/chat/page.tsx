@@ -199,7 +199,7 @@ export default function Chat() {
           </div>
           <h2 className="text-xl font-bold text-white mb-2">Live Support Portal</h2>
           <p className="text-xs text-muted-foreground mb-6 leading-relaxed">
-            Please sign in to your brokerage account to connect directly with dedicated 24/7 administrative support.
+            Please sign in to your ApexVeltrix account to connect directly with dedicated 24/7 administrative support.
           </p>
           <Link
             href="/signin"
@@ -444,7 +444,8 @@ export default function Chat() {
                   handleSendMessage();
                 }
               }}
-              className="flex-1 bg-transparent border-none outline-none text-xs text-white px-2 placeholder-muted-foreground"
+              style={{ fontSize: "16px" }}
+              className="flex-1 bg-transparent border-none outline-none text-base text-white px-2 placeholder-muted-foreground"
             />
             <button
               onClick={handleEmoji}

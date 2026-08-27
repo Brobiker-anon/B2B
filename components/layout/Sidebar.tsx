@@ -67,10 +67,10 @@ export default function Sidebar() {
       <div className="h-16 flex items-center px-6 border-b border-white/10">
         <Link href="/" className="flex items-center gap-2 group">
           <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-brand to-brand-glow flex items-center justify-center text-white font-bold group-hover:animate-pulse-glow">
-            B
+            A
           </div>
           <span className="text-lg font-bold tracking-tight text-white group-hover:text-glow transition-all">
-            BrokerageX
+            ApexVeltrix
           </span>
         </Link>
       </div>

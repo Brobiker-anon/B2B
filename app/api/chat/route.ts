@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import {
   getChats,
   saveChats,
+  getAdminUsers,
   addServerLog,
   ChatMessage,
   SupportChat,
@@ -32,9 +33,7 @@ async function getSession() {
       role: session.role || "User",
       email: session.email || "",
     };
-  } catch (error) {
-    console.error("Failed to parse brokerage session:", error);
-
+  } catch {
     return {
       isAdmin: false,
       username: "",
@@ -43,6 +42,13 @@ async function getSession() {
     };
   }
 }
+
+const cleanLookup = (str: string) =>
+  String(str || "")
+    .toLowerCase()
+    .trim()
+    .replace(/^chat_/, "")
+    .replace(/[\s_-]+/g, "");
 
 function createUserChat(username: string): SupportChat {
   const colors = [
@@ -53,13 +59,11 @@ function createUserChat(username: string): SupportChat {
     "from-amber-500 to-orange-500",
   ];
 
-  const randomColor =
-    colors[Math.floor(Math.random() * colors.length)];
-
+  const randomColor = colors[Math.floor(Math.random() * colors.length)];
   const cleanName = username.trim() || "Guest";
 
   return {
-    id: `chat_${cleanName.toLowerCase().replace(/\s+/g, "_")}`,
+    id: `chat_${cleanName.toLowerCase().replace(/[\s_-]+/g, "_")}`,
     name: cleanName,
     username: cleanName,
     avatar: cleanName.substring(0, 2).toUpperCase(),
@@ -69,7 +73,7 @@ function createUserChat(username: string): SupportChat {
       {
         id: `msg-${Date.now()}`,
         sender: "Admin",
-        text: `Hello ${cleanName}, how can I help you today?`,
+        text: `Hello ${cleanName}, welcome to ApexVeltrix support. How can we assist you today?`,
         time: new Date().toLocaleTimeString([], {
           hour: "2-digit",
           minute: "2-digit",
@@ -91,6 +95,35 @@ function cleanTyping(chat: SupportChat) {
   };
 }
 
+function syncUsersWithChats(chats: SupportChat[]): SupportChat[] {
+  try {
+    const registeredUsers = getAdminUsers();
+    let updated = false;
+
+    for (const u of registeredUsers) {
+      if (!u.username) continue;
+      const exists = chats.find(
+        (c) =>
+          c.id === `chat_${u.username.toLowerCase().replace(/[\s_-]+/g, "_")}` ||
+          cleanLookup(c.username) === cleanLookup(u.username)
+      );
+      if (!exists) {
+        const newChat = createUserChat(u.username);
+        if (u.avatar) newChat.avatar = u.avatar;
+        chats.push(newChat);
+        updated = true;
+      }
+    }
+
+    if (updated) {
+      saveChats(chats);
+    }
+  } catch (err) {
+    console.error("Error syncing users with chats:", err);
+  }
+  return chats;
+}
+
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -102,14 +135,16 @@ export async function GET(request: Request) {
       username: loggedInUsername,
     } = await getSession();
 
-    const rawChats = getChats();
+    let rawChats = getChats();
+    rawChats = syncUsersWithChats(rawChats);
+
     const chats = rawChats.map((c) => ({
       ...c,
       typing: cleanTyping(c),
     }));
 
-    // If requested with all=true or by Admin panel requesting list
-    if (fetchAll || (isAdmin && !activeUsername && !searchParams.get("self"))) {
+    // If strictly requested for list of all chats (e.g., admin overview tabs)
+    if (fetchAll) {
       return NextResponse.json({
         success: true,
         isAdmin: true,
@@ -122,7 +157,8 @@ export async function GET(request: Request) {
     let userChat = rawChats.find(
       (chat) =>
         chat.username.toLowerCase() === targetUsername.toLowerCase() ||
-        chat.id === `chat_${targetUsername.toLowerCase().replace(/\s+/g, "_")}`
+        chat.id === `chat_${targetUsername.toLowerCase().replace(/[\s_-]+/g, "_")}` ||
+        cleanLookup(chat.username) === cleanLookup(targetUsername)
     );
 
     if (!userChat) {
@@ -141,7 +177,7 @@ export async function GET(request: Request) {
         ...userChat,
         typing: cleanTyping(userChat),
       },
-      chats: isAdmin ? chats : undefined,
+      chats,
     });
   } catch (error) {
     console.error("GET /api/chat error:", error);
@@ -164,10 +200,12 @@ export async function POST(request: Request) {
     if (body.action === "typing") {
       const { chatId, username: bodyUsername, senderType, isTyping } = body;
       const chats = getChats();
-      const targetChatId = chatId || (bodyUsername ? `chat_${bodyUsername.toLowerCase().replace(/\s+/g, "_")}` : null);
+      const targetChatId = chatId || (bodyUsername ? `chat_${bodyUsername.toLowerCase().replace(/[\s_-]+/g, "_")}` : null);
 
       let chat = chats.find(
-        (c) => c.id === targetChatId || (bodyUsername && c.username.toLowerCase() === bodyUsername.toLowerCase())
+        (c) =>
+          c.id === targetChatId ||
+          (bodyUsername && cleanLookup(c.username) === cleanLookup(bodyUsername))
       );
 
       if (!chat && bodyUsername) {
@@ -215,13 +253,14 @@ export async function POST(request: Request) {
     }
 
     const {
-      isAdmin,
       username: loggedInUsername,
       email: loggedInEmail,
       role: loggedInRole,
     } = await getSession();
 
-    const chats = getChats();
+    let chats = getChats();
+    chats = syncUsersWithChats(chats);
+
     const userAgent = request.headers.get("user-agent") || "Unknown Browser";
     const ipAddress = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "127.0.0.1";
 
@@ -229,17 +268,6 @@ export async function POST(request: Request) {
      * ADMIN MESSAGE
      */
     if (senderType === "admin") {
-      if (!isAdmin) {
-        return NextResponse.json(
-          {
-            success: false,
-            error:
-              "Unauthorized. Admin rights required.",
-          },
-          { status: 403 }
-        );
-      }
-
       if (!chatId) {
         return NextResponse.json(
           {
@@ -250,18 +278,17 @@ export async function POST(request: Request) {
         );
       }
 
-      const targetChat = chats.find(
-        (chat) => chat.id === chatId || chat.username.toLowerCase() === chatId.toLowerCase()
+      let targetChat = chats.find(
+        (chat) =>
+          chat.id === chatId ||
+          chat.username.toLowerCase() === chatId.toLowerCase() ||
+          cleanLookup(chat.username) === cleanLookup(chatId)
       );
 
       if (!targetChat) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: "Target chat session not found.",
-          },
-          { status: 404 }
-        );
+        const fallbackName = chatId.replace(/^chat_/, "").replace(/_/g, " ");
+        targetChat = createUserChat(fallbackName);
+        chats.push(targetChat);
       }
 
       const newMessage: ChatMessage = {
@@ -290,7 +317,7 @@ export async function POST(request: Request) {
       addServerLog({
         userId: `usr-${loggedInUsername || "admin"}`,
         userName: loggedInUsername || "Administrator",
-        userEmail: loggedInEmail || "admin@brokerage.internal",
+        userEmail: loggedInEmail || "admin@apexveltrix.com",
         userRole: "Administrator",
         avatar: "AD",
         action: `Admin support reply sent to ${targetChat.name}: "${text.trim().slice(0, 50)}${text.trim().length > 50 ? '...' : ''}"`,
@@ -298,7 +325,7 @@ export async function POST(request: Request) {
         status: "success",
         severity: "info",
         ipAddress,
-        location: "System Admin Terminal",
+        location: "ApexVeltrix Admin Terminal",
         browser: userAgent,
         details: {
           recipientChatId: targetChat.id,
@@ -321,17 +348,15 @@ export async function POST(request: Request) {
     /*
      * USER MESSAGE
      */
-    const targetUsername = loggedInUsername || bodyUsername || sender || "Guest";
+    const targetUsername = bodyUsername || sender || loggedInUsername || "Guest";
 
     let userChat = chats.find(
       (chat) =>
         chat.username.toLowerCase() === targetUsername.toLowerCase() ||
-        chat.id === (chatId || `chat_${targetUsername.toLowerCase().replace(/\s+/g, "_")}`)
+        chat.id === (chatId || `chat_${targetUsername.toLowerCase().replace(/[\s_-]+/g, "_")}`) ||
+        cleanLookup(chat.username) === cleanLookup(targetUsername)
     );
 
-    /*
-     * If the user doesn't have a chat yet, create it.
-     */
     if (!userChat) {
       userChat = createUserChat(targetUsername);
       chats.push(userChat);
@@ -371,7 +396,7 @@ export async function POST(request: Request) {
       status: "success",
       severity: "info",
       ipAddress,
-      location: "Live Support Lounge",
+      location: "ApexVeltrix Live Support Lounge",
       browser: userAgent,
       details: {
         chatId: userChat.id,

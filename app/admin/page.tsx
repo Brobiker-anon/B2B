@@ -468,6 +468,22 @@ export default function AdminPortal() {
 
     setSendingChat(true);
 
+    const tempMsg = {
+      id: `admin-${Date.now()}`,
+      sender: "Admin",
+      text,
+      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      senderType: "admin",
+    };
+
+    setSupportChats((prev) =>
+      prev.map((c) =>
+        c.id === activeChatId
+          ? { ...c, messages: [...(c.messages || []), tempMsg], lastUpdated: new Date().toISOString() }
+          : c
+      )
+    );
+
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
@@ -1795,7 +1811,8 @@ export default function AdminPortal() {
                       placeholder={`Reply to ${currentChat.name || currentChat.username} as Admin (typing indicator active)...`}
                       value={chatReplyText}
                       onChange={handleAdminInputChange}
-                      className="flex-1 bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white placeholder-muted-foreground focus:outline-none focus:border-brand"
+                      style={{ fontSize: "16px" }}
+                      className="flex-1 bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-base text-white placeholder-muted-foreground focus:outline-none focus:border-brand"
                     />
                     <button
                       type="submit"

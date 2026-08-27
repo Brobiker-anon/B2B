@@ -26,7 +26,7 @@ export default function ConnectWallet() {
   };
 
   const handleMobileApp = () => {
-    connectWallet("BrokerageX App");
+    connectWallet("ApexVeltrix App");
   };
 
   if (walletConnected) {
@@ -124,7 +124,7 @@ export default function ConnectWallet() {
           </div>
           <div>
             <h4 className="font-bold text-white">Mobile App</h4>
-            <p className="text-xs text-muted-foreground">Open in BrokerageX App</p>
+            <p className="text-xs text-muted-foreground">Open in ApexVeltrix App</p>
           </div>
         </GlassCard>
       </div>
@@ -132,7 +132,7 @@ export default function ConnectWallet() {
       <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-4 flex items-start gap-3 w-full max-w-xl">
         <ShieldAlert className="w-5 h-5 text-yellow-500 shrink-0 mt-0.5" />
         <p className="text-xs text-yellow-500/90 leading-relaxed">
-          <strong>Security Notice:</strong> BrokerageX will never ask for your seed phrase or private keys. Do not share them with anyone, including our support staff. Only approve transactions you initiate.
+          <strong>Security Notice:</strong> ApexVeltrix will never ask for your seed phrase or private keys. Do not share them with anyone, including our support staff. Only approve transactions you initiate.
         </p>
       </div>
     </motion.div>

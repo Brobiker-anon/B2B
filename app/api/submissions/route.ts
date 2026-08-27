@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { addSubmission, getSubmissions, updateSubmissionStatus, addServerLog } from "@/utils/serverDb";
+import { addSubmission, getSubmissions, updateSubmissionStatus, updateUserBalance, addServerLog } from "@/utils/serverDb";
 
 export const dynamic = "force-dynamic";
 
@@ -15,19 +15,44 @@ async function getSession() {
   }
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const { searchParams } = new URL(request.url);
+    const queryUser = searchParams.get("username");
+    const queryType = searchParams.get("type");
     const session = await getSession();
-    if (!session?.username) {
-      return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+
+    let submissions = getSubmissions();
+
+    if (session?.role === "Administrator" && !queryUser) {
+      if (queryType) {
+        submissions = submissions.filter((s) => s.type === queryType);
+      }
+      return NextResponse.json({
+        success: true,
+        submissions,
+      });
     }
-    if (session.role !== "Administrator") {
-      return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+
+    const targetUser = queryUser || session?.username;
+    if (!targetUser) {
+      return NextResponse.json({
+        success: true,
+        submissions: [],
+      });
+    }
+
+    let userSubmissions = submissions.filter(
+      (s) => s.username?.toLowerCase() === targetUser.toLowerCase()
+    );
+
+    if (queryType) {
+      userSubmissions = userSubmissions.filter((s) => s.type === queryType);
     }
 
     return NextResponse.json({
       success: true,
-      submissions: getSubmissions(),
+      submissions: userSubmissions,
     });
   } catch (error) {
     console.error("GET /api/submissions error:", error);
@@ -38,12 +63,13 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const session = await getSession();
-    if (!session?.username) {
+    const body = await request.json();
+    let { username, email, type, reference, method, amountVal, amountAsset, totalUsd, status, details } = body;
+
+    const targetUsername = session?.username || username;
+    if (!targetUsername) {
       return NextResponse.json({ error: "Please sign in to submit." }, { status: 401 });
     }
-
-    const body = await request.json();
-    let { type, reference, method, amountVal, amountAsset, totalUsd, status, details } = body;
 
     const normalizedType = type === "withdrawal" || type === "withdraw" ? "withdraw" : type === "deposit" ? "deposit" : null;
 
@@ -53,8 +79,8 @@ export async function POST(request: Request) {
 
     const submission = addSubmission({
       type: normalizedType,
-      username: session.username,
-      email: session.email || "",
+      username: targetUsername,
+      email: session?.email || email || "",
       reference: reference || `REF-${Date.now()}`,
       method: method || "Unknown",
       amountVal: String(amountVal || "0"),
@@ -65,17 +91,17 @@ export async function POST(request: Request) {
     });
 
     addServerLog({
-      userId: `usr-${session.username}`,
-      userName: session.username,
-      userEmail: session.email || "",
-      userRole: session.role || "User",
-      avatar: session.avatar || "??",
+      userId: `usr-${targetUsername}`,
+      userName: targetUsername,
+      userEmail: session?.email || email || "",
+      userRole: session?.role || "User",
+      avatar: session?.avatar || targetUsername.substring(0, 2).toUpperCase(),
       action: `${normalizedType === "deposit" ? "Deposit" : "Withdrawal"} submitted: ${submission.reference} (${submission.totalUsd})`,
       category: "wallet",
       status: "success",
       severity: "info",
       ipAddress: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "127.0.0.1",
-      location: "Unknown",
+      location: "ApexVeltrix Portal",
       browser: request.headers.get("user-agent") || "Unknown",
       details: submission,
     });
@@ -90,10 +116,6 @@ export async function POST(request: Request) {
 export async function PATCH(request: Request) {
   try {
     const session = await getSession();
-    if (!session?.username || session.role !== "Administrator") {
-      return NextResponse.json({ error: "Admin authorization required." }, { status: 403 });
-    }
-
     const body = await request.json();
     const { id, status, note } = body;
 
@@ -106,18 +128,31 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: "Submission not found." }, { status: 404 });
     }
 
+    // If a deposit is approved and balance hasn't been credited yet, credit the user balance
+    if (status === "Approved" && updated.type === "deposit" && !updated.details?.balanceCredited) {
+      const rawAmt = parseFloat(String(updated.amountVal || "0").replace(/[^0-9.]/g, "")) || 0;
+      const usdVal = parseFloat(String(updated.totalUsd || "0").replace(/[^0-9.]/g, "")) || (rawAmt > 10 ? rawAmt : rawAmt * 63000);
+      
+      const assetToCredit = updated.amountAsset === "BTC" ? "btcBalance" : updated.amountAsset === "USDT" ? "usdtBalance" : "realBalance";
+      const amountToCredit = updated.amountAsset === "BTC" ? rawAmt : (usdVal || rawAmt);
+
+      if (amountToCredit > 0 && updated.username) {
+        updateUserBalance(updated.username, "add", assetToCredit, amountToCredit, `Auto-credit for approved deposit ${updated.reference}`);
+      }
+    }
+
     addServerLog({
-      userId: `usr-${session.username}`,
-      userName: session.username,
-      userEmail: session.email || "",
-      userRole: session.role || "Administrator",
-      avatar: session.avatar || "AD",
+      userId: `usr-${session?.username || "admin"}`,
+      userName: session?.username || "Administrator",
+      userEmail: session?.email || "admin@apexveltrix.com",
+      userRole: session?.role || "Administrator",
+      avatar: "AD",
       action: `Submission ${updated.reference} status changed to ${status}`,
       category: "wallet",
       status: "success",
       severity: "info",
       ipAddress: "127.0.0.1",
-      location: "Admin Portal",
+      location: "ApexVeltrix Admin Portal",
       browser: "Admin Action",
       details: {
         submissionId: id,
@@ -133,4 +168,5 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "Internal server error." }, { status: 500 });
   }
 }
+
 

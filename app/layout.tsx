@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import Sidebar from "@/components/layout/Sidebar";
 import Topbar from "@/components/layout/Topbar";
@@ -6,10 +6,18 @@ import NavigationLogger from "@/components/layout/NavigationLogger";
 import { AppProvider } from "@/context/AppContext";
 import ToastContainer from "@/components/layout/ToastContainer";
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+};
+
 export const metadata: Metadata = {
   title: "ApexVeltrix",
-  description: "Premium fintech dashboard and modern brokerage platform",
+  description: "ApexVeltrix - Premium fintech dashboard and modern trading platform",
 };
+
 
 export default function RootLayout({
   children,
@@ -18,6 +26,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="dark">
+      <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+      </head>
       <body className="font-sans min-h-screen flex bg-[#06070a] text-white">
         <AppProvider>
           <NavigationLogger />
