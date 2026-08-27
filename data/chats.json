@@ -87,9 +87,20 @@
         "text": "What's your complain?",
         "time": "00:39",
         "senderType": "admin"
+      },
+      {
+        "id": "msg-1787871793242-277",
+        "sender": "aaaaaa",
+        "text": "Deposit status inquiry",
+        "time": "00:03",
+        "senderType": "user"
       }
     ],
-    "lastUpdated": "2026-08-24T23:39:20.366Z"
+    "lastUpdated": "2026-08-27T23:03:13.243Z",
+    "typing": {
+      "user": false,
+      "userLastTyped": 0
+    }
   },
   {
     "id": "chat_qwerty",
@@ -143,5 +154,59 @@
       }
     ],
     "lastUpdated": "2026-08-25T00:22:22.630Z"
+  },
+  {
+    "id": "chat_jjj",
+    "name": "jjj",
+    "username": "jjj",
+    "avatar": "JJ",
+    "color": "from-pink-500 to-rose-500",
+    "status": "Online",
+    "messages": [
+      {
+        "id": "msg-1787871791051",
+        "sender": "Admin",
+        "text": "Hello jjj, welcome to ApexVeltrix support. How can we assist you today?",
+        "time": "00:03",
+        "senderType": "admin"
+      }
+    ],
+    "lastUpdated": "2026-08-27T23:03:12.587Z"
+  },
+  {
+    "id": "chat_joker",
+    "name": "joker",
+    "username": "joker",
+    "avatar": "JO",
+    "color": "from-green-500 to-emerald-500",
+    "status": "Online",
+    "messages": [
+      {
+        "id": "msg-1787871792588",
+        "sender": "Admin",
+        "text": "Hello joker, welcome to ApexVeltrix support. How can we assist you today?",
+        "time": "00:03",
+        "senderType": "admin"
+      }
+    ],
+    "lastUpdated": "2026-08-27T23:03:12.588Z"
+  },
+  {
+    "id": "chat_aaaaa",
+    "name": "aaaaa",
+    "username": "aaaaa",
+    "avatar": "AA",
+    "color": "from-green-500 to-emerald-500",
+    "status": "Online",
+    "messages": [
+      {
+        "id": "msg-1787871792589",
+        "sender": "Admin",
+        "text": "Hello aaaaa, welcome to ApexVeltrix support. How can we assist you today?",
+        "time": "00:03",
+        "senderType": "admin"
+      }
+    ],
+    "lastUpdated": "2026-08-27T23:03:12.589Z"
   }
 ]

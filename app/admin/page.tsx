@@ -186,18 +186,24 @@ export default function AdminPortal() {
     }
   };
 
+  const isAdminPollingRef = useRef(false);
+
   // Poll chats periodically
   useEffect(() => {
     if (!isAuthenticated || activeTab !== "chats") return;
     const interval = setInterval(async () => {
+      if (isAdminPollingRef.current) return;
+      isAdminPollingRef.current = true;
       try {
         const chatRes = await fetch("/api/chat?all=true", { cache: "no-store" });
         if (chatRes.ok) {
           const cData = await chatRes.json();
           setSupportChats(cData.chats || []);
         }
-      } catch {}
-    }, 2000);
+      } catch {} finally {
+        isAdminPollingRef.current = false;
+      }
+    }, 450);
     return () => clearInterval(interval);
   }, [isAuthenticated, activeTab]);
 

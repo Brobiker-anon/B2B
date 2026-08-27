@@ -211,6 +211,10 @@ export interface SupportChat {
   typing?: TypingStatus;
 }
 
+declare global {
+  var __chats_cache__: SupportChat[] | undefined;
+}
+
 export const getChats = (): SupportChat[] => {
   ensureDataFolder();
   try {
@@ -220,19 +224,27 @@ export const getChats = (): SupportChat[] => {
       if (fs.existsSync(bundledPath)) {
         try {
           const bundled = fs.readFileSync(bundledPath, "utf-8");
+          const parsed = JSON.parse(bundled);
           fs.writeFileSync(chatsPath, bundled, "utf-8");
-          return JSON.parse(bundled);
+          globalThis.__chats_cache__ = parsed;
+          return parsed;
         } catch {
           // fall through
         }
       }
       const initialChats: SupportChat[] = [];
       fs.writeFileSync(chatsPath, JSON.stringify(initialChats, null, 2), "utf-8");
+      globalThis.__chats_cache__ = initialChats;
       return initialChats;
     }
     const data = fs.readFileSync(chatsPath, "utf-8");
-    return JSON.parse(data);
+    const parsed = JSON.parse(data);
+    globalThis.__chats_cache__ = parsed;
+    return parsed;
   } catch (err) {
+    if (globalThis.__chats_cache__) {
+      return globalThis.__chats_cache__;
+    }
     console.error("Error reading chats file:", err);
     return [];
   }
@@ -240,6 +252,7 @@ export const getChats = (): SupportChat[] => {
 
 export const saveChats = (chats: SupportChat[]) => {
   ensureDataFolder();
+  globalThis.__chats_cache__ = chats;
   try {
     fs.writeFileSync(filePath("chats.json"), JSON.stringify(chats, null, 2), "utf-8");
   } catch (err) {

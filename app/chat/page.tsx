@@ -26,41 +26,36 @@ export default function Chat() {
     messagesEndRef.current?.scrollIntoView({ behavior: smooth ? "smooth" : "auto" });
   };
 
+  const activeUsername = user?.username || "Guest";
+
   // Broadcast typing status to server
   const sendTypingStatus = useCallback(async (isTyping: boolean) => {
-    if (!user?.username) return;
     try {
       await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "typing",
-          username: user.username,
+          username: activeUsername,
           senderType: "user",
           isTyping,
         }),
       });
     } catch {}
-  }, [user?.username]);
+  }, [activeUsername]);
+
+  const isPollingRef = useRef(false);
 
   // Fetch chat data periodically
-  const fetchChat = async () => {
-    if (!user?.username) {
-      setLoading(false);
-      return;
-    }
-
+  const fetchChat = useCallback(async () => {
+    if (isPollingRef.current) return;
+    isPollingRef.current = true;
     try {
-      const usernameParam = `?username=${encodeURIComponent(user.username)}`;
+      const usernameParam = `?username=${encodeURIComponent(activeUsername)}`;
       const res = await fetch(`/api/chat${usernameParam}`, {
         credentials: "include",
         cache: "no-store",
       });
-
-      if (res.status === 401) {
-        setChatData(null);
-        return;
-      }
 
       if (res.ok) {
         const data = await res.json();
@@ -71,20 +66,16 @@ export default function Chat() {
     } catch (err) {
       console.error("Failed to poll chat:", err);
     } finally {
+      isPollingRef.current = false;
       setLoading(false);
     }
-  };
+  }, [activeUsername]);
 
   useEffect(() => {
-    if (!user?.username) {
-      setLoading(false);
-      return;
-    }
-
     fetchChat();
-    const interval = setInterval(fetchChat, 1200); // Poll every 1.2s for responsive typing
+    const interval = setInterval(fetchChat, 400); // Super-fast 400ms real-time sync
     return () => clearInterval(interval);
-  }, [user?.username]);
+  }, [fetchChat]);
 
   // Scroll to bottom on new message or when admin is typing
   useEffect(() => {
@@ -110,11 +101,6 @@ export default function Chat() {
   };
 
   const handleSendMessage = async (textOverride?: string) => {
-    if (!user?.username) {
-      addToast("Please sign in to use live chat.", "error");
-      return;
-    }
-
     const textToSend = (textOverride || messageInput).trim();
     if (!textToSend || sending) return;
 
@@ -128,7 +114,7 @@ export default function Chat() {
     const tempId = `temp-${Date.now()}`;
     const optimisticMessage = {
       id: tempId,
-      sender: user.username,
+      sender: activeUsername,
       text: textToSend,
       time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       senderType: "user",
@@ -147,7 +133,7 @@ export default function Chat() {
         body: JSON.stringify({
           text: textToSend,
           senderType: "user",
-          username: user.username,
+          username: activeUsername,
         }),
       });
 
@@ -189,29 +175,6 @@ export default function Chat() {
     const randomEmoji = emojis[Math.floor(Math.random() * emojis.length)];
     setMessageInput((prev) => prev + randomEmoji);
   };
-
-  if (!user) {
-    return (
-      <div className="h-[calc(100vh-8rem)] flex items-center justify-center text-slate-100">
-        <GlassCard className="p-8 text-center max-w-md border-white/10 shadow-2xl">
-          <div className="w-14 h-14 rounded-2xl bg-brand/10 border border-brand/30 flex items-center justify-center text-brand mx-auto mb-4 box-glow">
-            <MessageSquare className="w-7 h-7" />
-          </div>
-          <h2 className="text-xl font-bold text-white mb-2">Live Support Portal</h2>
-          <p className="text-xs text-muted-foreground mb-6 leading-relaxed">
-            Please sign in to your ApexVeltrix account to connect directly with dedicated 24/7 administrative support.
-          </p>
-          <Link
-            href="/signin"
-            className="inline-flex items-center gap-2 px-6 py-2.5 bg-brand hover:bg-brand/90 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-brand/20"
-          >
-            <span>Sign In to Continue</span>
-            <ArrowRight className="w-4 h-4" />
-          </Link>
-        </GlassCard>
-      </div>
-    );
-  }
 
   const messages = chatData?.messages || [];
   const isAdminTyping = Boolean(chatData?.typing?.admin);
@@ -256,7 +219,7 @@ export default function Chat() {
             <div className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider flex items-center gap-1">
               <User className="w-3 h-3 text-muted-foreground" /> Account ID
             </div>
-            <div className="text-xs font-bold text-brand truncate font-mono">{user.username}</div>
+            <div className="text-xs font-bold text-brand truncate font-mono">{user?.username || activeUsername}</div>
           </div>
 
           {/* Quick Support Suggestions */}

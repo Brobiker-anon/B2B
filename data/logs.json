@@ -1,5 +1,161 @@
 [
   {
+    "userId": "usr-aaaaaa",
+    "userName": "aaaaaa",
+    "userEmail": "aaaaaa@gmail.com",
+    "userRole": "Administrator",
+    "avatar": "AA",
+    "action": "Live chat message from aaaaaa: \"Deposit status inquiry\"",
+    "category": "chat",
+    "status": "success",
+    "severity": "info",
+    "ipAddress": "::1",
+    "location": "ApexVeltrix Live Support Lounge",
+    "browser": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "details": {
+      "chatId": "chat_aaaaaa",
+      "user": "aaaaaa",
+      "messageId": "msg-1787871793242-277",
+      "text": "Deposit status inquiry"
+    },
+    "id": "log-1787871793256-15",
+    "timestamp": "2026-08-27T23:03:13.256Z"
+  },
+  {
+    "userId": "usr-john-doe",
+    "userName": "John Doe",
+    "userEmail": "john.doe@brokerage.com",
+    "userRole": "Retail Investor",
+    "avatar": "JD",
+    "action": "User joined ApexVeltrix Community Chat lounge",
+    "category": "chat",
+    "status": "success",
+    "severity": "info",
+    "ipAddress": "192.168.1.104",
+    "location": "New York, USA",
+    "browser": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "details": {
+      "path": "/chat"
+    },
+    "id": "log-1787871786966-73",
+    "timestamp": "2026-08-27T23:03:06.967Z"
+  },
+  {
+    "userId": "usr-john-doe",
+    "userName": "John Doe",
+    "userEmail": "john.doe@brokerage.com",
+    "userRole": "Retail Investor",
+    "avatar": "JD",
+    "action": "User viewed Portfolio Dashboard",
+    "category": "system",
+    "status": "success",
+    "severity": "info",
+    "ipAddress": "192.168.1.104",
+    "location": "New York, USA",
+    "browser": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "details": {
+      "path": "/"
+    },
+    "id": "log-1787871773800-801",
+    "timestamp": "2026-08-27T23:02:53.800Z"
+  },
+  {
+    "userId": "usr-john-doe",
+    "userName": "John Doe",
+    "userEmail": "john.doe@brokerage.com",
+    "userRole": "Retail Investor",
+    "avatar": "JD",
+    "action": "User navigated to Deposit & Wallet Transfer dashboard",
+    "category": "wallet",
+    "status": "success",
+    "severity": "info",
+    "ipAddress": "192.168.1.104",
+    "location": "New York, USA",
+    "browser": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "details": {
+      "path": "/deposit"
+    },
+    "id": "log-1787871759907-813",
+    "timestamp": "2026-08-27T23:02:39.907Z"
+  },
+  {
+    "userId": "usr-john-doe",
+    "userName": "John Doe",
+    "userEmail": "john.doe@brokerage.com",
+    "userRole": "Retail Investor",
+    "avatar": "JD",
+    "action": "User viewed Portfolio Dashboard",
+    "category": "system",
+    "status": "success",
+    "severity": "info",
+    "ipAddress": "192.168.1.104",
+    "location": "New York, USA",
+    "browser": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "details": {
+      "path": "/"
+    },
+    "id": "log-1787871745362-634",
+    "timestamp": "2026-08-27T23:02:25.362Z"
+  },
+  {
+    "userId": "usr-john-doe",
+    "userName": "John Doe",
+    "userEmail": "john.doe@brokerage.com",
+    "userRole": "Retail Investor",
+    "avatar": "JD",
+    "action": "User navigated to Deposit & Wallet Transfer dashboard",
+    "category": "wallet",
+    "status": "success",
+    "severity": "info",
+    "ipAddress": "192.168.1.104",
+    "location": "New York, USA",
+    "browser": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "details": {
+      "path": "/deposit"
+    },
+    "id": "log-1787871741799-142",
+    "timestamp": "2026-08-27T23:02:21.799Z"
+  },
+  {
+    "userId": "usr-aaaaaa",
+    "userName": "aaaaaa",
+    "userEmail": "aaaaaa@gmail.com",
+    "userRole": "Administrator",
+    "avatar": "AA",
+    "action": "User authenticated successfully (Administrator)",
+    "category": "security",
+    "status": "success",
+    "severity": "info",
+    "ipAddress": "::1",
+    "location": "Unknown",
+    "browser": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "details": {
+      "role": "Administrator",
+      "protocol": "Secured Handshake"
+    },
+    "id": "log-1787871729482-108",
+    "timestamp": "2026-08-27T23:02:09.482Z"
+  },
+  {
+    "userId": "usr-john-doe",
+    "userName": "John Doe",
+    "userEmail": "john.doe@brokerage.com",
+    "userRole": "Retail Investor",
+    "avatar": "JD",
+    "action": "User viewed Portfolio Dashboard",
+    "category": "system",
+    "status": "success",
+    "severity": "info",
+    "ipAddress": "192.168.1.104",
+    "location": "New York, USA",
+    "browser": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "details": {
+      "path": "/"
+    },
+    "id": "log-1787871701873-494",
+    "timestamp": "2026-08-27T23:01:41.873Z"
+  },
+  {
     "userId": "usr-john-doe",
     "userName": "John Doe",
     "userEmail": "john.doe@brokerage.com",
@@ -3665,157 +3821,5 @@
     },
     "id": "log-1783411329838-452",
     "timestamp": "2026-07-07T08:02:09.838Z"
-  },
-  {
-    "userId": "usr-john-doe",
-    "userName": "John Doe",
-    "userEmail": "john.doe@brokerage.com",
-    "userRole": "Retail Investor",
-    "avatar": "JD",
-    "action": "User viewed High-Yield Investing options",
-    "category": "trade",
-    "status": "success",
-    "severity": "info",
-    "ipAddress": "192.168.1.104",
-    "location": "New York, USA",
-    "browser": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
-    "details": {
-      "path": "/investing"
-    },
-    "id": "log-1783411325709-321",
-    "timestamp": "2026-07-07T08:02:05.709Z"
-  },
-  {
-    "userId": "usr-john-doe",
-    "userName": "John Doe",
-    "userEmail": "john.doe@brokerage.com",
-    "userRole": "Retail Investor",
-    "avatar": "JD",
-    "action": "User opened Institutional Cold Storage settings",
-    "category": "security",
-    "status": "success",
-    "severity": "info",
-    "ipAddress": "192.168.1.104",
-    "location": "New York, USA",
-    "browser": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
-    "details": {
-      "path": "/cold-storage"
-    },
-    "id": "log-1783411319641-457",
-    "timestamp": "2026-07-07T08:01:59.641Z"
-  },
-  {
-    "userId": "usr-john-doe",
-    "userName": "John Doe",
-    "userEmail": "john.doe@brokerage.com",
-    "userRole": "Retail Investor",
-    "avatar": "JD",
-    "action": "User accessed path: /withdraw",
-    "category": "system",
-    "status": "success",
-    "severity": "info",
-    "ipAddress": "192.168.1.104",
-    "location": "New York, USA",
-    "browser": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
-    "details": {
-      "path": "/withdraw"
-    },
-    "id": "log-1783411313747-130",
-    "timestamp": "2026-07-07T08:01:53.747Z"
-  },
-  {
-    "userId": "usr-john-doe",
-    "userName": "John Doe",
-    "userEmail": "john.doe@brokerage.com",
-    "userRole": "Retail Investor",
-    "avatar": "JD",
-    "action": "User navigated to Deposit & Wallet Transfer dashboard",
-    "category": "wallet",
-    "status": "success",
-    "severity": "info",
-    "ipAddress": "192.168.1.104",
-    "location": "New York, USA",
-    "browser": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
-    "details": {
-      "path": "/deposit"
-    },
-    "id": "log-1783411309338-916",
-    "timestamp": "2026-07-07T08:01:49.338Z"
-  },
-  {
-    "userId": "usr-john-doe",
-    "userName": "John Doe",
-    "userEmail": "john.doe@brokerage.com",
-    "userRole": "Retail Investor",
-    "avatar": "JD",
-    "action": "User viewed Portfolio Dashboard",
-    "category": "system",
-    "status": "success",
-    "severity": "info",
-    "ipAddress": "192.168.1.104",
-    "location": "New York, USA",
-    "browser": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
-    "details": {
-      "path": "/"
-    },
-    "id": "log-1783411286006-428",
-    "timestamp": "2026-07-07T08:01:26.006Z"
-  },
-  {
-    "userId": "usr-john-doe",
-    "userName": "John Doe",
-    "userEmail": "john.doe@brokerage.com",
-    "userRole": "Retail Investor",
-    "avatar": "JD",
-    "action": "User opened Institutional Cold Storage settings",
-    "category": "security",
-    "status": "success",
-    "severity": "info",
-    "ipAddress": "192.168.1.104",
-    "location": "New York, USA",
-    "browser": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
-    "details": {
-      "path": "/cold-storage"
-    },
-    "id": "log-1783408716786-63",
-    "timestamp": "2026-07-07T07:18:36.786Z"
-  },
-  {
-    "userId": "usr-john-doe",
-    "userName": "John Doe",
-    "userEmail": "john.doe@brokerage.com",
-    "userRole": "Retail Investor",
-    "avatar": "JD",
-    "action": "User accessed Trade Execution terminal",
-    "category": "trade",
-    "status": "success",
-    "severity": "info",
-    "ipAddress": "192.168.1.104",
-    "location": "New York, USA",
-    "browser": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
-    "details": {
-      "path": "/trade"
-    },
-    "id": "log-1783408614386-766",
-    "timestamp": "2026-07-07T07:16:54.386Z"
-  },
-  {
-    "userId": "usr-john-doe",
-    "userName": "John Doe",
-    "userEmail": "john.doe@brokerage.com",
-    "userRole": "Retail Investor",
-    "avatar": "JD",
-    "action": "User viewed Portfolio Dashboard",
-    "category": "system",
-    "status": "success",
-    "severity": "info",
-    "ipAddress": "192.168.1.104",
-    "location": "New York, USA",
-    "browser": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
-    "details": {
-      "path": "/"
-    },
-    "id": "log-1783408602947-210",
-    "timestamp": "2026-07-07T07:16:42.947Z"
   }
 ]

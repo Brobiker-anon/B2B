@@ -95,7 +95,15 @@ function cleanTyping(chat: SupportChat) {
   };
 }
 
+let lastUsersSync = 0;
+
 function syncUsersWithChats(chats: SupportChat[]): SupportChat[] {
+  const now = Date.now();
+  if (now - lastUsersSync < 15000 && chats.length > 0) {
+    return chats;
+  }
+  lastUsersSync = now;
+
   try {
     const registeredUsers = getAdminUsers();
     let updated = false;
