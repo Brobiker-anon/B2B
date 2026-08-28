@@ -91,44 +91,7 @@ export default function Chat() {
     return Array.from(msgMap.values());
   }, []);
 
-  // Load cached messages from localStorage on startup
-  useEffect(() => {
-    if (!activeUsername) return;
-    try {
-      const cleanUser = activeUsername.toLowerCase().replace(/[\s_-]+/g, "");
-      const cached = localStorage.getItem(`apex_chat_${cleanUser}`);
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setChatData((prev: any) => ({
-            ...(prev || {}),
-            id: `chat_${cleanUser}`,
-            username: activeUsername,
-            messages: mergeMessages(prev?.messages || [], parsed),
-          }));
-        }
-      }
-    } catch {}
-  }, [activeUsername, mergeMessages]);
-
-  // Persist messages to localStorage whenever they update (always merge before save)
-  useEffect(() => {
-    if (!activeUsername || !chatData?.messages?.length) return;
-    try {
-      const cleanUser = activeUsername.toLowerCase().replace(/[\s_-]+/g, "");
-      let existingCached: any[] = [];
-      const raw = localStorage.getItem(`apex_chat_${cleanUser}`);
-      if (raw) {
-        try {
-          existingCached = JSON.parse(raw) || [];
-        } catch {}
-      }
-      const combined = mergeMessages(existingCached, chatData.messages);
-      localStorage.setItem(`apex_chat_${cleanUser}`, JSON.stringify(combined));
-    } catch {}
-  }, [activeUsername, chatData?.messages, mergeMessages]);
-
-  // Fetch chat data periodically with Smart Non-Destructive Merge
+  // Fetch chat data periodically from MongoDB Atlas
   const fetchChat = useCallback(async () => {
     if (isPollingRef.current) return;
     isPollingRef.current = true;
