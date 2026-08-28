@@ -280,8 +280,15 @@ export default function Chat() {
       if (res.ok) {
         const data = await res.json();
         console.log("✅ [User -> Chat] Message delivered successfully:", data);
-        if (data.chat) {
-          setChatData(data.chat);
+        if (data.chat || data.message) {
+          setChatData((prev: any) => ({
+            ...(prev || {}),
+            ...(data.chat || {}),
+            messages: mergeMessages(
+              prev?.messages || [],
+              data.chat?.messages || (data.message ? [data.message] : [])
+            ),
+          }));
         } else {
           fetchChat();
         }

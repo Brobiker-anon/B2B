@@ -756,10 +756,29 @@ export default function AdminPortal() {
       if (res.ok) {
         const data = await res.json();
         console.log("✅ [Admin -> Chat] Reply delivered successfully:", data);
-        const cRes = await fetch("/api/chat?all=true", { cache: "no-store" });
-        if (cRes.ok) {
-          const cData = await cRes.json();
-          setSupportChats(cData.chats || []);
+        if (data?.message) {
+          setSupportChats((prev) =>
+            prev.map((c) =>
+              c.id === targetChatId
+                ? {
+                    ...c,
+                    messages: (() => {
+                      const msgMap = new Map();
+                      (c.messages || []).forEach((m: any) => msgMap.set(m.id, m));
+                      // Replace temp optimistic message
+                      for (const [k, v] of msgMap.entries()) {
+                        if (k.startsWith("admin-") && v.text === text) {
+                          msgMap.delete(k);
+                        }
+                      }
+                      msgMap.set(data.message.id, data.message);
+                      return Array.from(msgMap.values());
+                    })(),
+                    lastUpdated: new Date().toISOString(),
+                  }
+                : c
+            )
+          );
         }
       } else {
         const errData = await res.json().catch(() => ({}));
