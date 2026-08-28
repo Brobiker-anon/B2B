@@ -240,14 +240,12 @@ export default function Chat() {
 
   const handleSendMessage = async (textOverride?: string) => {
     const textToSend = (textOverride || messageInput).trim();
-    if (!textToSend || sending) return;
+    if (!textToSend) return;
 
     setMessageInput("");
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     setIsTypingSelf(false);
     sendTypingStatus(false);
-
-    setSending(true);
 
     const nowTime = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
     const tempId = `temp-${Date.now()}`;
@@ -579,7 +577,7 @@ export default function Chat() {
             <button
               onClick={() => handleSendMessage()}
               type="button"
-              disabled={!messageInput.trim() || sending}
+              disabled={!messageInput.trim()}
               className="bg-brand hover:bg-brand/90 disabled:opacity-40 text-white p-2.5 rounded-xl transition-all shadow-md shadow-brand/20 cursor-pointer"
             >
               <Send className="w-3.5 h-3.5" />

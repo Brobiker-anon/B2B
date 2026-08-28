@@ -482,7 +482,7 @@ export async function POST(request: Request) {
 
     // Real-time WebSocket Broadcast to user and admin channels
     triggerPusherEvent(
-      ["admin-support-channel", userChat.id, `chat_${cleanLookup(userChat.username)}`],
+      ["admin-support-channel", "global-support-chat", userChat.id, `chat_${cleanLookup(userChat.username)}`],
       "new-message",
       {
         chatId: userChat.id,

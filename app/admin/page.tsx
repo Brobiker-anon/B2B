@@ -291,44 +291,66 @@ export default function AdminPortal() {
     if (!isAuthenticated) return;
     try {
       const pusher = getPusherClient();
-      console.log("📡 [Admin Pusher] Subscribing to channel: admin-support-channel");
-      const channel = pusher.subscribe("admin-support-channel");
+      console.log("📡 [Admin Pusher] Subscribing to admin channels");
+      const channel1 = pusher.subscribe("admin-support-channel");
+      const channel2 = pusher.subscribe("global-support-chat");
 
-      channel.bind("new-message", (data: any) => {
+      const handleNewMessage = (data: any) => {
         console.log("⚡ [Admin WebSocket] Received new-message event:", data);
         if (data?.chatId && data?.message) {
           setSupportChats((prev) => {
-            const existing = prev.find((c) => c.id === data.chatId);
-            if (existing) {
+            const cleanTarget = (data.chat?.username || data.chatId || "").toLowerCase().replace(/^chat_/, "").replace(/[\s_-]+/g, "");
+
+            const existingIndex = prev.findIndex(
+              (c) =>
+                c.id === data.chatId ||
+                (c.id && c.id.toLowerCase().replace(/^chat_/, "").replace(/[\s_-]+/g, "") === cleanTarget) ||
+                (c.username && c.username.toLowerCase().replace(/[\s_-]+/g, "") === cleanTarget)
+            );
+
+            if (existingIndex !== -1) {
+              const existing = prev[existingIndex];
               const currentMsgs = existing.messages || [];
-              if (currentMsgs.some((m: any) => m.id === data.message.id)) {
-                return prev;
+
+              const msgMap = new Map();
+              currentMsgs.forEach((m: any) => msgMap.set(m.id, m));
+              // Remove temporary optimistic message if admin reply
+              if (data.message.senderType === "admin") {
+                for (const [k, v] of msgMap.entries()) {
+                  if (k.startsWith("admin-") && v.text === data.message.text) {
+                    msgMap.delete(k);
+                  }
+                }
               }
-              return prev.map((c) =>
-                c.id === data.chatId
-                  ? {
-                      ...c,
-                      ...(data.chat || {}),
-                      messages: [...currentMsgs.filter((m: any) => !m.id.startsWith("admin-")), data.message],
-                      lastUpdated: new Date().toISOString(),
-                      typing: { ...(c.typing || {}), user: false },
-                    }
-                  : c
-              );
+              msgMap.set(data.message.id, data.message);
+
+              const updatedChat = {
+                ...existing,
+                messages: Array.from(msgMap.values()),
+                lastUpdated: new Date().toISOString(),
+                typing: { ...(existing.typing || {}), user: false },
+              };
+
+              const copy = [...prev];
+              copy[existingIndex] = updatedChat;
+              return copy;
             } else if (data.chat) {
               return [data.chat, ...prev];
             }
             return prev;
           });
         }
-      });
+      };
 
-      channel.bind("typing", (data: any) => {
+      const handleTyping = (data: any) => {
         console.log("⌨️ [Admin WebSocket] User typing event received:", data);
         if (data?.chatId && data?.senderType === "user") {
+          const cleanTarget = (data.username || data.chatId || "").toLowerCase().replace(/^chat_/, "").replace(/[\s_-]+/g, "");
           setSupportChats((prev) =>
             prev.map((c) =>
-              c.id === data.chatId
+              c.id === data.chatId ||
+              (c.id && c.id.toLowerCase().replace(/^chat_/, "").replace(/[\s_-]+/g, "") === cleanTarget) ||
+              (c.username && c.username.toLowerCase().replace(/[\s_-]+/g, "") === cleanTarget)
                 ? {
                     ...c,
                     typing: {
@@ -340,11 +362,18 @@ export default function AdminPortal() {
             )
           );
         }
-      });
+      };
+
+      channel1.bind("new-message", handleNewMessage);
+      channel2.bind("new-message", handleNewMessage);
+      channel1.bind("typing", handleTyping);
+      channel2.bind("typing", handleTyping);
 
       return () => {
-        channel.unbind_all();
+        channel1.unbind_all();
+        channel2.unbind_all();
         pusher.unsubscribe("admin-support-channel");
+        pusher.unsubscribe("global-support-chat");
       };
     } catch (e) {
       console.error("Admin Pusher client error:", e);
@@ -740,8 +769,6 @@ export default function AdminPortal() {
     if (adminTypingTimeoutRef.current) clearTimeout(adminTypingTimeoutRef.current);
     setIsAdminTypingSelf(false);
     sendAdminTypingStatus(false);
-
-    setSendingChat(true);
 
     const tempMsg = {
       id: `admin-${Date.now()}`,
@@ -2181,7 +2208,7 @@ export default function AdminPortal() {
                     />
                     <button
                       type="submit"
-                      disabled={sendingChat || !chatReplyText.trim()}
+                      disabled={!chatReplyText.trim()}
                       className="p-2.5 bg-brand hover:bg-brand/90 text-white rounded-xl disabled:opacity-50 transition-all cursor-pointer shadow-md shadow-brand/20"
                     >
                       <Send className="w-4 h-4" />
