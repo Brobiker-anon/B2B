@@ -28,10 +28,10 @@ async function getSession() {
     const session = JSON.parse(sessionCookie.value);
 
     return {
-      isAdmin: session.role === "Administrator",
-      username: session.username || "",
-      role: session.role || "User",
-      email: session.email || "",
+      isAdmin: session?.role === "Administrator",
+      username: session?.username || "",
+      role: session?.role || "User",
+      email: session?.email || "",
     };
   } catch {
     return {
@@ -85,7 +85,8 @@ function createUserChat(username: string): SupportChat {
   };
 }
 
-function cleanTyping(chat: SupportChat) {
+function cleanTyping(chat: SupportChat | undefined | null) {
+  if (!chat) return { user: false, admin: false };
   const now = Date.now();
   const userTyping = Boolean(chat.typing?.user && (now - (chat.typing?.userLastTyped || 0)) < 3500);
   const adminTyping = Boolean(chat.typing?.admin && (now - (chat.typing?.adminLastTyped || 0)) < 3500);
@@ -109,7 +110,7 @@ function syncUsersWithChats(chats: SupportChat[]): SupportChat[] {
     let updated = false;
 
     for (const u of registeredUsers) {
-      if (!u.username) continue;
+      if (!u?.username) continue;
       const exists = chats.find(
         (c) =>
           c.id === `chat_${u.username.toLowerCase().replace(/[\s_-]+/g, "_")}` ||
@@ -143,15 +144,15 @@ export async function GET(request: Request) {
       username: loggedInUsername,
     } = await getSession();
 
-    let rawChats = getChats();
+    let rawChats = getChats() || [];
     rawChats = syncUsersWithChats(rawChats);
 
     const chats = rawChats.map((c) => ({
       ...c,
+      messages: Array.isArray(c.messages) ? c.messages : [],
       typing: cleanTyping(c),
     }));
 
-    // If strictly requested for list of all chats (e.g., admin overview tabs)
     if (fetchAll) {
       return NextResponse.json({
         success: true,
@@ -160,12 +161,11 @@ export async function GET(request: Request) {
       });
     }
 
-    // For non-admin user chat room, prioritize the authenticated session username
     const targetUsername = (!isAdmin && loggedInUsername) ? loggedInUsername : (activeUsername || loggedInUsername || "Guest");
 
     let userChat = rawChats.find(
       (chat) =>
-        chat.username.toLowerCase() === targetUsername.toLowerCase() ||
+        chat.username?.toLowerCase() === targetUsername.toLowerCase() ||
         chat.id === `chat_${targetUsername.toLowerCase().replace(/[\s_-]+/g, "_")}` ||
         cleanLookup(chat.username) === cleanLookup(targetUsername)
     );
@@ -176,6 +176,9 @@ export async function GET(request: Request) {
       saveChats(rawChats);
     } else {
       userChat.status = "Online";
+      if (!Array.isArray(userChat.messages)) {
+        userChat.messages = [];
+      }
       saveChats(rawChats);
     }
 
@@ -184,6 +187,7 @@ export async function GET(request: Request) {
       isAdmin,
       chat: {
         ...userChat,
+        messages: Array.isArray(userChat.messages) ? userChat.messages : [],
         typing: cleanTyping(userChat),
       },
       chats,
@@ -203,12 +207,17 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
+    let body: any = {};
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json({ success: false, error: "Invalid JSON body" }, { status: 400 });
+    }
 
     // Handle typing status notification
     if (body.action === "typing") {
       const { chatId, username: bodyUsername, senderType, isTyping } = body;
-      const chats = getChats();
+      const chats = getChats() || [];
       const targetChatId = chatId || (bodyUsername ? `chat_${bodyUsername.toLowerCase().replace(/[\s_-]+/g, "_")}` : null);
 
       let chat = chats.find(
@@ -262,16 +271,22 @@ export async function POST(request: Request) {
     }
 
     const {
+      isAdmin,
       username: loggedInUsername,
       email: loggedInEmail,
       role: loggedInRole,
     } = await getSession();
 
-    let chats = getChats();
+    let chats = getChats() || [];
     chats = syncUsersWithChats(chats);
 
     const userAgent = request.headers.get("user-agent") || "Unknown Browser";
     const ipAddress = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "127.0.0.1";
+
+    const formattedTime = body.clientTime || new Date().toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
 
     /*
      * ADMIN MESSAGE
@@ -290,7 +305,7 @@ export async function POST(request: Request) {
       let targetChat = chats.find(
         (chat) =>
           chat.id === chatId ||
-          chat.username.toLowerCase() === chatId.toLowerCase() ||
+          chat.username?.toLowerCase() === chatId.toLowerCase() ||
           cleanLookup(chat.username) === cleanLookup(chatId)
       );
 
@@ -300,10 +315,9 @@ export async function POST(request: Request) {
         chats.push(targetChat);
       }
 
-      const formattedTime = body.clientTime || new Date().toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      });
+      if (!Array.isArray(targetChat.messages)) {
+        targetChat.messages = [];
+      }
 
       const newMessage: ChatMessage = {
         id: `msg-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
@@ -324,33 +338,38 @@ export async function POST(request: Request) {
 
       saveChats(chats);
 
-      // Log admin support reply to server activity logs
-      addServerLog({
-        userId: `usr-${loggedInUsername || "admin"}`,
-        userName: loggedInUsername || "Administrator",
-        userEmail: loggedInEmail || "admin@apexveltrix.com",
-        userRole: "Administrator",
-        avatar: "AD",
-        action: `Admin support reply sent to ${targetChat.name}: "${text.trim().slice(0, 50)}${text.trim().length > 50 ? '...' : ''}"`,
-        category: "chat",
-        status: "success",
-        severity: "info",
-        ipAddress,
-        location: "ApexVeltrix Admin Terminal",
-        browser: userAgent,
-        details: {
-          recipientChatId: targetChat.id,
-          recipientUser: targetChat.username,
-          messageId: newMessage.id,
-          text: newMessage.text,
-        },
-      });
+      // Safe activity log
+      try {
+        addServerLog({
+          userId: `usr-${loggedInUsername || "admin"}`,
+          userName: loggedInUsername || "Administrator",
+          userEmail: loggedInEmail || "admin@apexveltrix.com",
+          userRole: "Administrator",
+          avatar: "AD",
+          action: `Admin support reply sent to ${targetChat.name || targetChat.username || "Client"}: "${text.trim().slice(0, 50)}${text.trim().length > 50 ? '...' : ''}"`,
+          category: "chat",
+          status: "success",
+          severity: "info",
+          ipAddress,
+          location: "ApexVeltrix Admin Terminal",
+          browser: userAgent,
+          details: {
+            recipientChatId: targetChat.id,
+            recipientUser: targetChat.username,
+            messageId: newMessage.id,
+            text: newMessage.text,
+          },
+        });
+      } catch (logErr) {
+        console.error("Non-fatal chat log error:", logErr);
+      }
 
       return NextResponse.json({
         success: true,
         message: newMessage,
         chat: {
           ...targetChat,
+          messages: Array.isArray(targetChat.messages) ? targetChat.messages : [],
           typing: cleanTyping(targetChat),
         },
       });
@@ -365,7 +384,7 @@ export async function POST(request: Request) {
 
     let userChat = chats.find(
       (chat) =>
-        chat.username.toLowerCase() === targetUsername.toLowerCase() ||
+        chat.username?.toLowerCase() === targetUsername.toLowerCase() ||
         chat.id === (chatId || `chat_${targetUsername.toLowerCase().replace(/[\s_-]+/g, "_")}`) ||
         cleanLookup(chat.username) === cleanLookup(targetUsername)
     );
@@ -375,10 +394,9 @@ export async function POST(request: Request) {
       chats.push(userChat);
     }
 
-    const formattedTime = body.clientTime || new Date().toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    if (!Array.isArray(userChat.messages)) {
+      userChat.messages = [];
+    }
 
     const newMessage: ChatMessage = {
       id: `msg-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
@@ -399,43 +417,48 @@ export async function POST(request: Request) {
 
     saveChats(chats);
 
-    // Log user chat message to server activity logs
-    addServerLog({
-      userId: `usr-${targetUsername}`,
-      userName: targetUsername,
-      userEmail: loggedInEmail || `${targetUsername}@user.net`,
-      userRole: loggedInRole || "User",
-      avatar: userChat.avatar,
-      action: `Live chat message from ${targetUsername}: "${text.trim().slice(0, 50)}${text.trim().length > 50 ? '...' : ''}"`,
-      category: "chat",
-      status: "success",
-      severity: "info",
-      ipAddress,
-      location: "ApexVeltrix Live Support Lounge",
-      browser: userAgent,
-      details: {
-        chatId: userChat.id,
-        user: targetUsername,
-        messageId: newMessage.id,
-        text: newMessage.text,
-      },
-    });
+    // Safe activity log
+    try {
+      addServerLog({
+        userId: `usr-${targetUsername}`,
+        userName: targetUsername,
+        userEmail: loggedInEmail || `${targetUsername}@user.net`,
+        userRole: loggedInRole || "User",
+        avatar: userChat.avatar || targetUsername.substring(0, 2).toUpperCase(),
+        action: `Live chat message from ${targetUsername}: "${text.trim().slice(0, 50)}${text.trim().length > 50 ? '...' : ''}"`,
+        category: "chat",
+        status: "success",
+        severity: "info",
+        ipAddress,
+        location: "ApexVeltrix Live Support Lounge",
+        browser: userAgent,
+        details: {
+          chatId: userChat.id,
+          user: targetUsername,
+          messageId: newMessage.id,
+          text: newMessage.text,
+        },
+      });
+    } catch (logErr) {
+      console.error("Non-fatal chat log error:", logErr);
+    }
 
     return NextResponse.json({
       success: true,
       message: newMessage,
       chat: {
         ...userChat,
+        messages: Array.isArray(userChat.messages) ? userChat.messages : [],
         typing: cleanTyping(userChat),
       },
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error("POST /api/chat error:", error);
 
     return NextResponse.json(
       {
         success: false,
-        error: "Internal server error.",
+        error: error?.message || "Internal server error.",
       },
       { status: 500 }
     );

@@ -4,7 +4,8 @@ import { addServerLog } from "@/utils/serverDb";
 
 export async function POST(request: Request) {
   try {
-    const sessionCookie = cookies().get("brokerage_session");
+    const cookieStore = await cookies();
+    const sessionCookie = cookieStore.get("brokerage_session");
     const userAgent = request.headers.get("user-agent") || "Unknown Browser";
     const ipAddress = request.headers.get("x-forwarded-for")?.split(",")[0] || "127.0.0.1";
 
@@ -34,7 +35,7 @@ export async function POST(request: Request) {
     }
 
     // Delete session cookie
-    cookies().delete("brokerage_session");
+    cookieStore.delete("brokerage_session");
 
     return NextResponse.json({ success: true });
 

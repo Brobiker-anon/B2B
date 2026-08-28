@@ -4,7 +4,8 @@ import { cookies } from "next/headers";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  const sessionCookie = cookies().get("brokerage_session");
+  const cookieStore = await cookies();
+  const sessionCookie = cookieStore.get("brokerage_session");
   if (!sessionCookie || !sessionCookie.value) {
     return new Response("Unauthorized", { status: 401 });
   }
