@@ -586,14 +586,15 @@ export default function AdminPortal() {
 
   // Send Admin Chat Typing Status
   const sendAdminTypingStatus = async (isTyping: boolean) => {
-    if (!activeChatId) return;
+    const targetChatId = activeChatId || currentChat?.id;
+    if (!targetChatId) return;
     try {
       await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "typing",
-          chatId: activeChatId,
+          chatId: targetChatId,
           senderType: "admin",
           isTyping,
         }),
@@ -620,7 +621,8 @@ export default function AdminPortal() {
 
   // Send Admin Chat Reply
   const handleSendChatReply = async (textOverride?: string) => {
-    if (!activeChatId) return;
+    const targetChatId = activeChatId || currentChat?.id;
+    if (!targetChatId) return;
     const text = (textOverride || chatReplyText).trim();
     if (!text) return;
 
@@ -641,7 +643,7 @@ export default function AdminPortal() {
 
     setSupportChats((prev) =>
       prev.map((c) =>
-        c.id === activeChatId
+        c.id === targetChatId
           ? { ...c, messages: [...(c.messages || []), tempMsg], lastUpdated: new Date().toISOString() }
           : c
       )
@@ -652,7 +654,7 @@ export default function AdminPortal() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          chatId: activeChatId,
+          chatId: targetChatId,
           text,
           senderType: "admin",
           clientTime: tempMsg.time,
@@ -747,10 +749,23 @@ export default function AdminPortal() {
     });
   }, [logs, logCategoryFilter, logSearch]);
 
+  // Sorted Support Chats by last activity
+  const sortedSupportChats = useMemo(() => {
+    return [...supportChats].sort((a, b) => {
+      const aTime = new Date(a.lastUpdated || 0).getTime();
+      const bTime = new Date(b.lastUpdated || 0).getTime();
+      return bTime - aTime;
+    });
+  }, [supportChats]);
+
   // Selected Chat Object
   const currentChat = useMemo(() => {
-    return supportChats.find((c) => c.id === activeChatId) || supportChats[0] || null;
-  }, [supportChats, activeChatId]);
+    if (activeChatId) {
+      const found = supportChats.find((c) => c.id === activeChatId);
+      if (found) return found;
+    }
+    return sortedSupportChats[0] || supportChats[0] || null;
+  }, [supportChats, sortedSupportChats, activeChatId]);
 
   // Selected User Object for balance calculations
   const selectedBalanceUserObj = useMemo(() => {
@@ -1825,13 +1840,13 @@ export default function AdminPortal() {
                 Active Client Conversations
               </h3>
               <div className="flex-1 overflow-y-auto space-y-1.5 pr-1">
-                {supportChats.length === 0 ? (
+                {sortedSupportChats.length === 0 ? (
                   <div className="py-16 text-center text-xs text-muted-foreground">
                     No active user support chats yet.
                   </div>
                 ) : (
-                  supportChats.map((chat) => {
-                    const isActive = chat.id === activeChatId;
+                  sortedSupportChats.map((chat) => {
+                    const isActive = chat.id === (activeChatId || currentChat?.id);
                     const lastMsg = chat.messages?.[chat.messages.length - 1];
                     const isUserTyping = Boolean(chat.typing?.user);
 
