@@ -5,6 +5,25 @@
     "userEmail": "john.doe@brokerage.com",
     "userRole": "Retail Investor",
     "avatar": "JD",
+    "action": "User viewed Portfolio Dashboard",
+    "category": "system",
+    "status": "success",
+    "severity": "info",
+    "ipAddress": "192.168.1.104",
+    "location": "New York, USA",
+    "browser": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "details": {
+      "path": "/"
+    },
+    "id": "log-1787915782320-840",
+    "timestamp": "2026-08-28T11:16:22.321Z"
+  },
+  {
+    "userId": "usr-john-doe",
+    "userName": "John Doe",
+    "userEmail": "john.doe@brokerage.com",
+    "userRole": "Retail Investor",
+    "avatar": "JD",
     "action": "User joined ApexVeltrix Community Chat lounge",
     "category": "chat",
     "status": "success",
@@ -3802,24 +3821,5 @@
     },
     "id": "log-1783411353088-977",
     "timestamp": "2026-07-07T08:02:33.088Z"
-  },
-  {
-    "userId": "usr-john-doe",
-    "userName": "John Doe",
-    "userEmail": "john.doe@brokerage.com",
-    "userRole": "Retail Investor",
-    "avatar": "JD",
-    "action": "User viewed Copy Trading network board",
-    "category": "referrals",
-    "status": "success",
-    "severity": "info",
-    "ipAddress": "192.168.1.104",
-    "location": "New York, USA",
-    "browser": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
-    "details": {
-      "path": "/copy-trading"
-    },
-    "id": "log-1783411345025-105",
-    "timestamp": "2026-07-07T08:02:25.025Z"
   }
 ]

@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import Script from "next/script";
 import "./globals.css";
 import Sidebar from "@/components/layout/Sidebar";
 import Topbar from "@/components/layout/Topbar";
@@ -28,6 +29,33 @@ export default function RootLayout({
     <html lang="en" className="dark">
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+        <Script
+          src="https://js.pusher.com/beams/2.1.0/push-notifications-cdn.js"
+          strategy="beforeInteractive"
+        />
+        <Script id="pusher-beams-init" strategy="afterInteractive">
+          {`
+            if (typeof window !== 'undefined' && 'Notification' in window) {
+              window.addEventListener('load', function() {
+                try {
+                  if (window.PusherPushNotifications) {
+                    const beamsClient = new PusherPushNotifications.Client({
+                      instanceId: '05471679-dad5-4e1f-a33c-f8edb415c329',
+                    });
+                    beamsClient.start()
+                      .then(() => beamsClient.addDeviceInterest('hello'))
+                      .then(() => console.log('Successfully registered and subscribed!'))
+                      .catch(function(err) {
+                        console.log('Pusher Beams registration:', err);
+                      });
+                  }
+                } catch(e) {
+                  console.log('Pusher initialization error:', e);
+                }
+              });
+            }
+          `}
+        </Script>
       </head>
       <body className="font-sans min-h-screen flex bg-[#06070a] text-white">
         <AppProvider>
