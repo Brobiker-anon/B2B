@@ -163,7 +163,9 @@ export async function GET(request: Request) {
       });
     }
 
-    const targetUsername = (!isAdmin && loggedInUsername) ? loggedInUsername : (activeUsername || loggedInUsername || "Guest");
+    const targetUsername = activeUsername?.trim()
+      ? activeUsername.trim()
+      : ((!isAdmin && loggedInUsername) ? loggedInUsername : (loggedInUsername || "Guest"));
 
     let userChat = rawChats.find(
       (chat) =>

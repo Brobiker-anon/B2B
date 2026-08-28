@@ -198,34 +198,12 @@ export default function AdminPortal() {
         setLogs(lData.logs || []);
       }
 
-      // Fetch chats with non-destructive merge
+      // Fetch chats directly from MongoDB
       const chatRes = await fetch("/api/chat?all=true", { cache: "no-store" });
       if (chatRes.ok) {
         const cData = await chatRes.json();
         const incomingChats = cData.chats || [];
-        setSupportChats((prev) => {
-          if (!prev.length) return incomingChats;
-          const chatMap = new Map();
-          prev.forEach((c) => chatMap.set(c.id, c));
-
-          incomingChats.forEach((nc: any) => {
-            const existing = chatMap.get(nc.id);
-            if (existing) {
-              const msgMap = new Map();
-              (existing.messages || []).forEach((m: any) => msgMap.set(m.id, m));
-              (nc.messages || []).forEach((m: any) => msgMap.set(m.id, m));
-              chatMap.set(nc.id, {
-                ...existing,
-                ...nc,
-                messages: Array.from(msgMap.values()),
-                typing: { ...(existing.typing || {}), ...(nc.typing || {}) },
-              });
-            } else {
-              chatMap.set(nc.id, nc);
-            }
-          });
-          return Array.from(chatMap.values());
-        });
+        setSupportChats(incomingChats);
         if (incomingChats.length > 0 && !activeChatId) {
           setActiveChatId(incomingChats[0].id);
         }
@@ -237,7 +215,7 @@ export default function AdminPortal() {
     }
   };
 
-  // Poll chats periodically with non-destructive merge
+  // Poll chats periodically from MongoDB Atlas
   useEffect(() => {
     if (!isAuthenticated || activeTab !== "chats") return;
     const interval = setInterval(async () => {
@@ -250,32 +228,19 @@ export default function AdminPortal() {
           const incomingChats = cData.chats || [];
           setSupportChats((prev) => {
             if (!prev.length) return incomingChats;
-            const chatMap = new Map();
-            prev.forEach((c) => chatMap.set(c.id, c));
-
-            incomingChats.forEach((nc: any) => {
-              const existing = chatMap.get(nc.id);
-              if (existing) {
-                const msgMap = new Map();
-                (existing.messages || []).forEach((m: any) => msgMap.set(m.id, m));
-                (nc.messages || []).forEach((m: any) => msgMap.set(m.id, m));
-                chatMap.set(nc.id, {
-                  ...existing,
-                  ...nc,
-                  messages: Array.from(msgMap.values()),
-                  typing: { ...(existing.typing || {}), ...(nc.typing || {}) },
-                });
-              } else {
-                chatMap.set(nc.id, nc);
-              }
+            return incomingChats.map((nc: any) => {
+              const existing = prev.find((p) => p.id === nc.id);
+              return {
+                ...nc,
+                typing: { ...(nc.typing || {}), ...(existing?.typing || {}) },
+              };
             });
-            return Array.from(chatMap.values());
           });
         }
       } catch {} finally {
         isAdminPollingRef.current = false;
       }
-    }, 1500);
+    }, 2000);
     return () => clearInterval(interval);
   }, [isAuthenticated, activeTab]);
 

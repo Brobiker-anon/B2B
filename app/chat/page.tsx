@@ -139,26 +139,32 @@ export default function Chat() {
       const cleanUser = activeUsername.toLowerCase().replace(/[\s_-]+/g, "");
       const channelName = `chat_${cleanUser}`;
       console.log(`📡 [Pusher] Subscribing to channel: ${channelName}`);
-      const channel = pusher.subscribe(channelName);
+      const channel1 = pusher.subscribe(channelName);
+      const channel2 = pusher.subscribe("global-support-chat");
 
-      channel.bind("new-message", (data: any) => {
+      const handleNewMessage = (data: any) => {
         console.log("⚡ [WebSocket Client] Received new-message event:", data);
-        if (data?.message) {
-          setChatData((prev: any) => {
-            const currentMsgs = prev?.messages || [];
-            return {
-              ...(prev || {}),
-              ...(data.chat || {}),
-              messages: mergeMessages(currentMsgs, [data.message]),
-              typing: { ...(prev?.typing || {}), admin: false },
-            };
-          });
+        const cleanIncoming = (data?.chatId || data?.chat?.username || "").toLowerCase().replace(/^chat_/, "").replace(/[\s_-]+/g, "");
+        if (cleanIncoming === cleanUser || !cleanIncoming) {
+          if (data?.message) {
+            setChatData((prev: any) => {
+              const currentMsgs = prev?.messages || [];
+              const serverMsgs = Array.isArray(data.chat?.messages) ? data.chat.messages : [data.message];
+              return {
+                ...(prev || {}),
+                ...(data.chat || {}),
+                messages: mergeMessages(currentMsgs, serverMsgs),
+                typing: { ...(prev?.typing || {}), admin: false },
+              };
+            });
+          }
         }
-      });
+      };
 
-      channel.bind("typing", (data: any) => {
+      const handleTyping = (data: any) => {
         console.log("⌨️ [WebSocket Client] Typing event received:", data);
-        if (data?.senderType === "admin") {
+        const cleanIncoming = (data?.chatId || data?.username || "").toLowerCase().replace(/^chat_/, "").replace(/[\s_-]+/g, "");
+        if ((cleanIncoming === cleanUser || !cleanIncoming) && data?.senderType === "admin") {
           setChatData((prev: any) => ({
             ...(prev || {}),
             typing: {
@@ -167,11 +173,18 @@ export default function Chat() {
             },
           }));
         }
-      });
+      };
+
+      channel1.bind("new-message", handleNewMessage);
+      channel2.bind("new-message", handleNewMessage);
+      channel1.bind("typing", handleTyping);
+      channel2.bind("typing", handleTyping);
 
       return () => {
-        channel.unbind_all();
+        channel1.unbind_all();
+        channel2.unbind_all();
         pusher.unsubscribe(channelName);
+        pusher.unsubscribe("global-support-chat");
       };
     } catch (e) {
       console.error("Pusher client error:", e);
