@@ -38,9 +38,10 @@ export default function RootLayout({
             if (typeof window !== 'undefined' && 'Notification' in window) {
               window.addEventListener('load', function() {
                 try {
-                  if (window.PusherPushNotifications) {
+                  const instanceId = '${process.env.NEXT_PUBLIC_PUSHER_BEAMS_INSTANCE_ID || ""}';
+                  if (instanceId && window.PusherPushNotifications) {
                     const beamsClient = new PusherPushNotifications.Client({
-                      instanceId: '05471679-dad5-4e1f-a33c-f8edb415c329',
+                      instanceId: instanceId,
                     });
                     beamsClient.start()
                       .then(() => beamsClient.addDeviceInterest('hello'))

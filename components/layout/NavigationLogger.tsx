@@ -2,9 +2,11 @@
 
 import { useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
+import { useApp } from "@/context/AppContext";
 
 export default function NavigationLogger() {
   const pathname = usePathname();
+  const { user } = useApp();
   const lastPathnameRef = useRef<string | null>(null);
 
   const postTelemetryLog = async (
@@ -15,24 +17,29 @@ export default function NavigationLogger() {
     details?: any
   ) => {
     try {
+      const activeName = user?.username || "Guest";
+      const activeEmail = user?.email || (user?.username ? `${user.username}@user.net` : "guest@apexveltrix.com");
+      const activeRole = user?.role || "Retail Investor";
+      const activeAvatar = user?.avatar || activeName.substring(0, 2).toUpperCase();
+
       await fetch("/api/logs", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          userId: "usr-john-doe",
-          userName: "John Doe",
-          userEmail: "john.doe@brokerage.com",
-          userRole: "Retail Investor",
-          avatar: "JD",
+          userId: `usr-${activeName.toLowerCase().replace(/[\s_-]+/g, "_")}`,
+          userName: activeName,
+          userEmail: activeEmail,
+          userRole: activeRole,
+          avatar: activeAvatar,
           action,
           category,
           status,
           severity,
-          ipAddress: "192.168.1.104",
-          location: "New York, USA",
-          browser: typeof navigator !== "undefined" ? navigator.userAgent : "Node SSR Client",
+          ipAddress: "127.0.0.1",
+          location: "ApexVeltrix Portal",
+          browser: typeof navigator !== "undefined" ? navigator.userAgent : "Client Browser",
           details: details || {}
         })
       });

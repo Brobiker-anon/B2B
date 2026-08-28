@@ -12,8 +12,10 @@ export async function sendPushNotification({
   body: string;
   deepLink?: string;
 }) {
-  const instanceId = process.env.PUSHER_BEAMS_INSTANCE_ID || "05471679-dad5-4e1f-a33c-f8edb415c329";
-  const secretKey = process.env.PUSHER_BEAMS_SECRET_KEY || "AF8E68CFE9506866E32C9F9DB2E9F458728BF1B357C6F418C3930CD9B080C31D";
+  const instanceId = process.env.PUSHER_BEAMS_INSTANCE_ID || process.env.NEXT_PUBLIC_PUSHER_BEAMS_INSTANCE_ID || "";
+  const secretKey = process.env.PUSHER_BEAMS_SECRET_KEY || "";
+
+  if (!instanceId || !secretKey) return null;
 
   try {
     const res = await fetch(
