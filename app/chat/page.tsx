@@ -111,14 +111,22 @@ export default function Chat() {
     } catch {}
   }, [activeUsername, mergeMessages]);
 
-  // Persist messages to localStorage whenever they update
+  // Persist messages to localStorage whenever they update (always merge before save)
   useEffect(() => {
     if (!activeUsername || !chatData?.messages?.length) return;
     try {
       const cleanUser = activeUsername.toLowerCase().replace(/[\s_-]+/g, "");
-      localStorage.setItem(`apex_chat_${cleanUser}`, JSON.stringify(chatData.messages));
+      let existingCached: any[] = [];
+      const raw = localStorage.getItem(`apex_chat_${cleanUser}`);
+      if (raw) {
+        try {
+          existingCached = JSON.parse(raw) || [];
+        } catch {}
+      }
+      const combined = mergeMessages(existingCached, chatData.messages);
+      localStorage.setItem(`apex_chat_${cleanUser}`, JSON.stringify(combined));
     } catch {}
-  }, [activeUsername, chatData?.messages]);
+  }, [activeUsername, chatData?.messages, mergeMessages]);
 
   // Fetch chat data periodically with Smart Non-Destructive Merge
   const fetchChat = useCallback(async () => {
