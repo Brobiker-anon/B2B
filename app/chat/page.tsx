@@ -10,6 +10,7 @@ import {
   Clock, Shield, User, RefreshCw
 } from "lucide-react";
 import { useApp } from "@/context/AppContext";
+import { getPusherClient } from "@/utils/pusherClient";
 
 export default function Chat() {
   const { user, addToast } = useApp();
@@ -93,11 +94,59 @@ export default function Chat() {
     }
   }, [activeUsername]);
 
+  // Initial load and backup poll
   useEffect(() => {
     fetchChat();
-    const interval = setInterval(fetchChat, 400); // Super-fast 400ms real-time sync
+    const interval = setInterval(fetchChat, 1000);
     return () => clearInterval(interval);
   }, [fetchChat]);
+
+  // Real-time WebSocket connection via Pusher Channels
+  useEffect(() => {
+    if (!activeUsername) return;
+    try {
+      const pusher = getPusherClient();
+      const cleanUser = activeUsername.toLowerCase().replace(/[\s_-]+/g, "");
+      const channelName = `chat_${cleanUser}`;
+      const channel = pusher.subscribe(channelName);
+
+      channel.bind("new-message", (data: any) => {
+        if (data?.message) {
+          setChatData((prev: any) => {
+            const currentMsgs = prev?.messages || [];
+            if (currentMsgs.some((m: any) => m.id === data.message.id)) {
+              return prev;
+            }
+            return {
+              ...(prev || {}),
+              ...(data.chat || {}),
+              messages: [...currentMsgs.filter((m: any) => !m.id.startsWith("temp-")), data.message],
+              typing: { ...(prev?.typing || {}), admin: false },
+            };
+          });
+        }
+      });
+
+      channel.bind("typing", (data: any) => {
+        if (data?.senderType === "admin") {
+          setChatData((prev: any) => ({
+            ...(prev || {}),
+            typing: {
+              ...(prev?.typing || {}),
+              admin: Boolean(data.isTyping),
+            },
+          }));
+        }
+      });
+
+      return () => {
+        channel.unbind_all();
+        pusher.unsubscribe(channelName);
+      };
+    } catch (e) {
+      console.error("Pusher client error:", e);
+    }
+  }, [activeUsername]);
 
   // Scroll to bottom on new message or when admin is typing
   useEffect(() => {

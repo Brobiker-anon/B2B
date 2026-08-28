@@ -13,6 +13,7 @@ import {
   Pencil, Plus
 } from "lucide-react";
 import GlassCard from "@/components/ui/GlassCard";
+import { getPusherClient } from "@/utils/pusherClient";
 
 export interface ActivityLog {
   id: string;
@@ -240,6 +241,68 @@ export default function AdminPortal() {
       chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }
   }, [activeChatId, supportChats]);
+
+  // Real-time WebSocket connection via Pusher Channels for Admin
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    try {
+      const pusher = getPusherClient();
+      const channel = pusher.subscribe("admin-support-channel");
+
+      channel.bind("new-message", (data: any) => {
+        if (data?.chatId && data?.message) {
+          setSupportChats((prev) => {
+            const existing = prev.find((c) => c.id === data.chatId);
+            if (existing) {
+              const currentMsgs = existing.messages || [];
+              if (currentMsgs.some((m: any) => m.id === data.message.id)) {
+                return prev;
+              }
+              return prev.map((c) =>
+                c.id === data.chatId
+                  ? {
+                      ...c,
+                      ...(data.chat || {}),
+                      messages: [...currentMsgs.filter((m: any) => !m.id.startsWith("admin-")), data.message],
+                      lastUpdated: new Date().toISOString(),
+                      typing: { ...(c.typing || {}), user: false },
+                    }
+                  : c
+              );
+            } else if (data.chat) {
+              return [data.chat, ...prev];
+            }
+            return prev;
+          });
+        }
+      });
+
+      channel.bind("typing", (data: any) => {
+        if (data?.chatId && data?.senderType === "user") {
+          setSupportChats((prev) =>
+            prev.map((c) =>
+              c.id === data.chatId
+                ? {
+                    ...c,
+                    typing: {
+                      ...(c.typing || {}),
+                      user: Boolean(data.isTyping),
+                    },
+                  }
+                : c
+            )
+          );
+        }
+      });
+
+      return () => {
+        channel.unbind_all();
+        pusher.unsubscribe("admin-support-channel");
+      };
+    } catch (e) {
+      console.error("Admin Pusher client error:", e);
+    }
+  }, [isAuthenticated]);
 
   // SSE Live Logs
   useEffect(() => {

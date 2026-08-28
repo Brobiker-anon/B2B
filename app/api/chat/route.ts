@@ -8,6 +8,8 @@ import {
   ChatMessage,
   SupportChat,
 } from "@/utils/serverDb";
+import { sendPushNotification } from "@/utils/beams";
+import { triggerPusherEvent } from "@/utils/pusherServer";
 
 export const dynamic = "force-dynamic";
 
@@ -240,6 +242,18 @@ export async function POST(request: Request) {
           [timeKey]: isTyping ? Date.now() : 0,
         };
         saveChats(chats);
+
+        // Real-time WebSocket typing broadcast
+        triggerPusherEvent(
+          ["admin-support-channel", chat.id, `chat_${cleanLookup(chat.username)}`],
+          "typing",
+          {
+            chatId: chat.id,
+            username: chat.username,
+            senderType,
+            isTyping: Boolean(isTyping),
+          }
+        ).catch(() => {});
       }
 
       return NextResponse.json({
@@ -364,6 +378,29 @@ export async function POST(request: Request) {
         console.error("Non-fatal chat log error:", logErr);
       }
 
+      // Real-time WebSocket Broadcast to user and admin channels
+      triggerPusherEvent(
+        ["admin-support-channel", targetChat.id, `chat_${cleanLookup(targetChat.username)}`],
+        "new-message",
+        {
+          chatId: targetChat.id,
+          message: newMessage,
+          chat: {
+            ...targetChat,
+            messages: targetChat.messages,
+            typing: cleanTyping(targetChat),
+          },
+        }
+      ).catch(() => {});
+
+      // Push Notification to user and hello interest
+      sendPushNotification({
+        interests: ["hello", `user_${targetChat.username?.toLowerCase()}`],
+        title: "Support Desk Reply",
+        body: text.trim().slice(0, 100),
+        deepLink: "/chat",
+      }).catch(() => {});
+
       return NextResponse.json({
         success: true,
         message: newMessage,
@@ -442,6 +479,29 @@ export async function POST(request: Request) {
     } catch (logErr) {
       console.error("Non-fatal chat log error:", logErr);
     }
+
+    // Real-time WebSocket Broadcast to user and admin channels
+    triggerPusherEvent(
+      ["admin-support-channel", userChat.id, `chat_${cleanLookup(userChat.username)}`],
+      "new-message",
+      {
+        chatId: userChat.id,
+        message: newMessage,
+        chat: {
+          ...userChat,
+          messages: userChat.messages,
+          typing: cleanTyping(userChat),
+        },
+      }
+    ).catch(() => {});
+
+    // Push Notification to admin and hello interest
+    sendPushNotification({
+      interests: ["hello", "admin"],
+      title: `Message from ${targetUsername}`,
+      body: text.trim().slice(0, 100),
+      deepLink: "/admin",
+    }).catch(() => {});
 
     return NextResponse.json({
       success: true,
