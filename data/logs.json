@@ -1,5 +1,24 @@
 [
   {
+    "userId": "usr-guest",
+    "userName": "Guest",
+    "userEmail": "guest@apexveltrix.com",
+    "userRole": "Retail Investor",
+    "avatar": "GU",
+    "action": "User viewed Portfolio Dashboard",
+    "category": "system",
+    "status": "success",
+    "severity": "info",
+    "ipAddress": "127.0.0.1",
+    "location": "ApexVeltrix Portal",
+    "browser": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "details": {
+      "path": "/"
+    },
+    "id": "log-1787930818788-88",
+    "timestamp": "2026-08-28T15:26:58.789Z"
+  },
+  {
     "userId": "usr-john-doe",
     "userName": "John Doe",
     "userEmail": "john.doe@brokerage.com",
@@ -3802,24 +3821,5 @@
     },
     "id": "log-1783411361312-733",
     "timestamp": "2026-07-07T08:02:41.312Z"
-  },
-  {
-    "userId": "usr-john-doe",
-    "userName": "John Doe",
-    "userEmail": "john.doe@brokerage.com",
-    "userRole": "Retail Investor",
-    "avatar": "JD",
-    "action": "User viewed Real-Time Markets Board",
-    "category": "trade",
-    "status": "success",
-    "severity": "info",
-    "ipAddress": "192.168.1.104",
-    "location": "New York, USA",
-    "browser": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
-    "details": {
-      "path": "/markets"
-    },
-    "id": "log-1783411353088-977",
-    "timestamp": "2026-07-07T08:02:33.088Z"
   }
 ]

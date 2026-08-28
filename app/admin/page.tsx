@@ -214,9 +214,7 @@ export default function AdminPortal() {
     }
   };
 
-  const isAdminPollingRef = useRef(false);
-
-  // Poll chats periodically
+  // Poll chats periodically with non-destructive merge
   useEffect(() => {
     if (!isAuthenticated || activeTab !== "chats") return;
     const interval = setInterval(async () => {
@@ -226,12 +224,35 @@ export default function AdminPortal() {
         const chatRes = await fetch("/api/chat?all=true", { cache: "no-store" });
         if (chatRes.ok) {
           const cData = await chatRes.json();
-          setSupportChats(cData.chats || []);
+          const incomingChats = cData.chats || [];
+          setSupportChats((prev) => {
+            if (!prev.length) return incomingChats;
+            const chatMap = new Map();
+            prev.forEach((c) => chatMap.set(c.id, c));
+
+            incomingChats.forEach((nc: any) => {
+              const existing = chatMap.get(nc.id);
+              if (existing) {
+                const msgMap = new Map();
+                (existing.messages || []).forEach((m: any) => msgMap.set(m.id, m));
+                (nc.messages || []).forEach((m: any) => msgMap.set(m.id, m));
+                chatMap.set(nc.id, {
+                  ...existing,
+                  ...nc,
+                  messages: Array.from(msgMap.values()),
+                  typing: { ...(existing.typing || {}), ...(nc.typing || {}) },
+                });
+              } else {
+                chatMap.set(nc.id, nc);
+              }
+            });
+            return Array.from(chatMap.values());
+          });
         }
       } catch {} finally {
         isAdminPollingRef.current = false;
       }
-    }, 450);
+    }, 1500);
     return () => clearInterval(interval);
   }, [isAuthenticated, activeTab]);
 

@@ -69,7 +69,58 @@ export default function Chat() {
 
   const isPollingRef = useRef(false);
 
-  // Fetch chat data periodically
+  // Helper to merge messages without ever losing locally received or optimistic messages
+  const mergeMessages = useCallback((existingList: any[] = [], incomingList: any[] = []) => {
+    const msgMap = new Map();
+    existingList.forEach((m) => {
+      if (m && m.id) msgMap.set(m.id, m);
+    });
+    incomingList.forEach((m) => {
+      if (m && m.id) {
+        // Remove any temp optimistic version if real message arrived
+        if (!m.id.startsWith("temp-")) {
+          for (const [key, val] of msgMap.entries()) {
+            if (key.startsWith("temp-") && val.text === m.text && val.sender === m.sender) {
+              msgMap.delete(key);
+            }
+          }
+        }
+        msgMap.set(m.id, m);
+      }
+    });
+    return Array.from(msgMap.values());
+  }, []);
+
+  // Load cached messages from localStorage on startup
+  useEffect(() => {
+    if (!activeUsername) return;
+    try {
+      const cleanUser = activeUsername.toLowerCase().replace(/[\s_-]+/g, "");
+      const cached = localStorage.getItem(`apex_chat_${cleanUser}`);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setChatData((prev: any) => ({
+            ...(prev || {}),
+            id: `chat_${cleanUser}`,
+            username: activeUsername,
+            messages: mergeMessages(prev?.messages || [], parsed),
+          }));
+        }
+      }
+    } catch {}
+  }, [activeUsername, mergeMessages]);
+
+  // Persist messages to localStorage whenever they update
+  useEffect(() => {
+    if (!activeUsername || !chatData?.messages?.length) return;
+    try {
+      const cleanUser = activeUsername.toLowerCase().replace(/[\s_-]+/g, "");
+      localStorage.setItem(`apex_chat_${cleanUser}`, JSON.stringify(chatData.messages));
+    } catch {}
+  }, [activeUsername, chatData?.messages]);
+
+  // Fetch chat data periodically with Smart Non-Destructive Merge
   const fetchChat = useCallback(async () => {
     if (isPollingRef.current) return;
     isPollingRef.current = true;
@@ -83,7 +134,15 @@ export default function Chat() {
       if (res.ok) {
         const data = await res.json();
         if (data.chat) {
-          setChatData(data.chat);
+          setChatData((prev: any) => {
+            if (!prev) return data.chat;
+            return {
+              ...prev,
+              ...data.chat,
+              messages: mergeMessages(prev.messages || [], data.chat.messages || []),
+              typing: { ...(prev.typing || {}), ...(data.chat.typing || {}) },
+            };
+          });
         }
       }
     } catch (err) {
@@ -92,12 +151,12 @@ export default function Chat() {
       isPollingRef.current = false;
       setLoading(false);
     }
-  }, [activeUsername]);
+  }, [activeUsername, mergeMessages]);
 
   // Initial load and backup poll
   useEffect(() => {
     fetchChat();
-    const interval = setInterval(fetchChat, 1000);
+    const interval = setInterval(fetchChat, 2000);
     return () => clearInterval(interval);
   }, [fetchChat]);
 
@@ -116,13 +175,10 @@ export default function Chat() {
         if (data?.message) {
           setChatData((prev: any) => {
             const currentMsgs = prev?.messages || [];
-            if (currentMsgs.some((m: any) => m.id === data.message.id)) {
-              return prev;
-            }
             return {
               ...(prev || {}),
               ...(data.chat || {}),
-              messages: [...currentMsgs.filter((m: any) => !m.id.startsWith("temp-")), data.message],
+              messages: mergeMessages(currentMsgs, [data.message]),
               typing: { ...(prev?.typing || {}), admin: false },
             };
           });
@@ -149,7 +205,7 @@ export default function Chat() {
     } catch (e) {
       console.error("Pusher client error:", e);
     }
-  }, [activeUsername]);
+  }, [activeUsername, mergeMessages]);
 
   // Scroll to bottom on new message or when admin is typing
   useEffect(() => {
