@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import {
-  getChats,
-  saveChats,
+  getChatsAsync,
+  saveChatsAsync,
   getAdminUsers,
   addServerLog,
   ChatMessage,
@@ -146,7 +146,7 @@ export async function GET(request: Request) {
       username: loggedInUsername,
     } = await getSession();
 
-    let rawChats = getChats() || [];
+    let rawChats = (await getChatsAsync()) || [];
     rawChats = syncUsersWithChats(rawChats);
 
     const chats = rawChats.map((c) => ({
@@ -175,13 +175,13 @@ export async function GET(request: Request) {
     if (!userChat) {
       userChat = createUserChat(targetUsername);
       rawChats.push(userChat);
-      saveChats(rawChats);
+      await saveChatsAsync(rawChats);
     } else {
       userChat.status = "Online";
       if (!Array.isArray(userChat.messages)) {
         userChat.messages = [];
       }
-      saveChats(rawChats);
+      await saveChatsAsync(rawChats);
     }
 
     return NextResponse.json({
@@ -219,7 +219,7 @@ export async function POST(request: Request) {
     // Handle typing status notification
     if (body.action === "typing") {
       const { chatId, username: bodyUsername, senderType, isTyping } = body;
-      const chats = getChats() || [];
+      const chats = (await getChatsAsync()) || [];
       const targetChatId = chatId || (bodyUsername ? `chat_${bodyUsername.toLowerCase().replace(/[\s_-]+/g, "_")}` : null);
 
       let chat = chats.find(
@@ -241,7 +241,7 @@ export async function POST(request: Request) {
           [typeKey]: Boolean(isTyping),
           [timeKey]: isTyping ? Date.now() : 0,
         };
-        saveChats(chats);
+        await saveChatsAsync(chats);
 
         // Real-time WebSocket typing broadcast
         triggerPusherEvent(
@@ -291,7 +291,7 @@ export async function POST(request: Request) {
       role: loggedInRole,
     } = await getSession();
 
-    let chats = getChats() || [];
+    let chats = (await getChatsAsync()) || [];
     chats = syncUsersWithChats(chats);
 
     const userAgent = request.headers.get("user-agent") || "Unknown Browser";
@@ -350,7 +350,7 @@ export async function POST(request: Request) {
         adminLastTyped: 0,
       };
 
-      saveChats(chats);
+      await saveChatsAsync(chats);
 
       // Safe activity log
       try {
@@ -452,7 +452,7 @@ export async function POST(request: Request) {
       userLastTyped: 0,
     };
 
-    saveChats(chats);
+    await saveChatsAsync(chats);
 
     // Safe activity log
     try {

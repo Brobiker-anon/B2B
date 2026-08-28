@@ -211,9 +211,48 @@ export interface SupportChat {
   typing?: TypingStatus;
 }
 
-declare global {
-  var __chats_cache__: SupportChat[] | undefined;
-}
+import {
+  getMongoChats,
+  saveAllMongoChats,
+  saveMongoChat,
+  getMongoUsers,
+  saveAllMongoUsers,
+  getMongoSubmissions,
+  saveMongoSubmission,
+  deleteMongoSubmission,
+  getMongoLogs,
+  addMongoLog,
+} from "./mongoDb";
+
+export const getChatsAsync = async (): Promise<SupportChat[]> => {
+  try {
+    const mongoChats = await getMongoChats();
+    if (mongoChats && mongoChats.length > 0) {
+      globalThis.__chats_cache__ = mongoChats;
+      return mongoChats;
+    }
+  } catch (err) {
+    console.error("MongoDB getChats error, falling back to local:", err);
+  }
+  return getChats();
+};
+
+export const saveChatsAsync = async (chats: SupportChat[]) => {
+  saveChats(chats);
+  try {
+    await saveAllMongoChats(chats);
+  } catch (err) {
+    console.error("MongoDB saveChats error:", err);
+  }
+};
+
+export const saveSingleChatAsync = async (chat: SupportChat) => {
+  try {
+    await saveMongoChat(chat);
+  } catch (err) {
+    console.error("MongoDB saveSingleChat error:", err);
+  }
+};
 
 export const getChats = (): SupportChat[] => {
   ensureDataFolder();
@@ -258,6 +297,8 @@ export const saveChats = (chats: SupportChat[]) => {
   } catch (err) {
     console.error("Error writing chats file:", err);
   }
+  // Async save to mongo in background
+  saveAllMongoChats(chats).catch(() => {});
 };
 
 

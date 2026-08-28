@@ -279,6 +279,48 @@ export default function AdminPortal() {
     return () => clearInterval(interval);
   }, [isAuthenticated, activeTab]);
 
+  // Load cached chats from localStorage on startup
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    try {
+      const cached = localStorage.getItem("apex_admin_support_chats");
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setSupportChats((prev) => {
+            if (!prev.length) return parsed;
+            const chatMap = new Map();
+            prev.forEach((c) => chatMap.set(c.id, c));
+            parsed.forEach((pc: any) => {
+              const existing = chatMap.get(pc.id);
+              if (existing) {
+                const msgMap = new Map();
+                (existing.messages || []).forEach((m: any) => msgMap.set(m.id, m));
+                (pc.messages || []).forEach((m: any) => msgMap.set(m.id, m));
+                chatMap.set(pc.id, {
+                  ...existing,
+                  ...pc,
+                  messages: Array.from(msgMap.values()),
+                });
+              } else {
+                chatMap.set(pc.id, pc);
+              }
+            });
+            return Array.from(chatMap.values());
+          });
+        }
+      }
+    } catch {}
+  }, [isAuthenticated]);
+
+  // Persist supportChats to localStorage whenever they update
+  useEffect(() => {
+    if (!isAuthenticated || !supportChats.length) return;
+    try {
+      localStorage.setItem("apex_admin_support_chats", JSON.stringify(supportChats));
+    } catch {}
+  }, [isAuthenticated, supportChats]);
+
   // Scroll chat to bottom
   useEffect(() => {
     if (activeChatId) {
