@@ -108,9 +108,11 @@ export default function Chat() {
       const pusher = getPusherClient();
       const cleanUser = activeUsername.toLowerCase().replace(/[\s_-]+/g, "");
       const channelName = `chat_${cleanUser}`;
+      console.log(`📡 [Pusher] Subscribing to channel: ${channelName}`);
       const channel = pusher.subscribe(channelName);
 
       channel.bind("new-message", (data: any) => {
+        console.log("⚡ [WebSocket Client] Received new-message event:", data);
         if (data?.message) {
           setChatData((prev: any) => {
             const currentMsgs = prev?.messages || [];
@@ -128,6 +130,7 @@ export default function Chat() {
       });
 
       channel.bind("typing", (data: any) => {
+        console.log("⌨️ [WebSocket Client] Typing event received:", data);
         if (data?.senderType === "admin") {
           setChatData((prev: any) => ({
             ...(prev || {}),
@@ -192,6 +195,13 @@ export default function Chat() {
       senderType: "user",
     };
 
+    console.log("💬 [User -> Chat] Sending message:", {
+      sender: activeUsername,
+      text: textToSend,
+      time: nowTime,
+      chatId: `chat_${activeUsername.toLowerCase().replace(/[\s_-]+/g, "_")}`,
+    });
+
     setChatData((prev: any) => ({
       ...prev,
       messages: [...(prev?.messages || []), optimisticMessage],
@@ -213,6 +223,7 @@ export default function Chat() {
 
       if (res.ok) {
         const data = await res.json();
+        console.log("✅ [User -> Chat] Message delivered successfully:", data);
         if (data.chat) {
           setChatData(data.chat);
         } else {
@@ -220,10 +231,12 @@ export default function Chat() {
         }
       } else {
         const errData = await res.json().catch(() => ({}));
+        console.error("❌ [User -> Chat] Delivery failed:", errData);
         addToast(errData.error || "Failed to deliver message.", "error");
         fetchChat();
       }
-    } catch {
+    } catch (err) {
+      console.error("❌ [User -> Chat] Network send error:", err);
       addToast("Failed to send message.", "error");
       fetchChat();
     } finally {

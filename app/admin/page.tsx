@@ -247,9 +247,11 @@ export default function AdminPortal() {
     if (!isAuthenticated) return;
     try {
       const pusher = getPusherClient();
+      console.log("📡 [Admin Pusher] Subscribing to channel: admin-support-channel");
       const channel = pusher.subscribe("admin-support-channel");
 
       channel.bind("new-message", (data: any) => {
+        console.log("⚡ [Admin WebSocket] Received new-message event:", data);
         if (data?.chatId && data?.message) {
           setSupportChats((prev) => {
             const existing = prev.find((c) => c.id === data.chatId);
@@ -278,6 +280,7 @@ export default function AdminPortal() {
       });
 
       channel.bind("typing", (data: any) => {
+        console.log("⌨️ [Admin WebSocket] User typing event received:", data);
         if (data?.chatId && data?.senderType === "user") {
           setSupportChats((prev) =>
             prev.map((c) =>
@@ -712,6 +715,12 @@ export default function AdminPortal() {
       )
     );
 
+    console.log("💬 [Admin -> Chat] Dispatching reply to:", {
+      targetChatId,
+      text,
+      time: tempMsg.time,
+    });
+
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
@@ -724,14 +733,19 @@ export default function AdminPortal() {
         }),
       });
       if (res.ok) {
+        const data = await res.json();
+        console.log("✅ [Admin -> Chat] Reply delivered successfully:", data);
         const cRes = await fetch("/api/chat?all=true", { cache: "no-store" });
         if (cRes.ok) {
           const cData = await cRes.json();
           setSupportChats(cData.chats || []);
         }
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        console.error("❌ [Admin -> Chat] Reply failed:", errData);
       }
     } catch (err) {
-      console.error("Send chat reply failed:", err);
+      console.error("❌ [Admin -> Chat] Send network error:", err);
     } finally {
       setSendingChat(false);
     }
