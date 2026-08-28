@@ -145,11 +145,12 @@ export default function Chat() {
       const handleNewMessage = (data: any) => {
         console.log("⚡ [WebSocket Client] Received new-message event:", data);
         const cleanIncoming = (data?.chatId || data?.chat?.username || "").toLowerCase().replace(/^chat_/, "").replace(/[\s_-]+/g, "");
-        if (cleanIncoming === cleanUser || !cleanIncoming) {
-          if (data?.message) {
+        const cleanCurr = (activeUsername || "").toLowerCase().replace(/^chat_/, "").replace(/[\s_-]+/g, "");
+        if (cleanIncoming === cleanCurr || !cleanIncoming || cleanCurr === "guest" || !cleanCurr) {
+          if (data?.message || data?.chat?.messages) {
             setChatData((prev: any) => {
               const currentMsgs = prev?.messages || [];
-              const serverMsgs = Array.isArray(data.chat?.messages) ? data.chat.messages : [data.message];
+              const serverMsgs = Array.isArray(data.chat?.messages) ? data.chat.messages : (data.message ? [data.message] : []);
               return {
                 ...(prev || {}),
                 ...(data.chat || {}),
@@ -164,7 +165,8 @@ export default function Chat() {
       const handleTyping = (data: any) => {
         console.log("⌨️ [WebSocket Client] Typing event received:", data);
         const cleanIncoming = (data?.chatId || data?.username || "").toLowerCase().replace(/^chat_/, "").replace(/[\s_-]+/g, "");
-        if ((cleanIncoming === cleanUser || !cleanIncoming) && data?.senderType === "admin") {
+        const cleanCurr = (activeUsername || "").toLowerCase().replace(/^chat_/, "").replace(/[\s_-]+/g, "");
+        if ((cleanIncoming === cleanCurr || !cleanIncoming || cleanCurr === "guest" || !cleanCurr) && data?.senderType === "admin") {
           setChatData((prev: any) => ({
             ...(prev || {}),
             typing: {
