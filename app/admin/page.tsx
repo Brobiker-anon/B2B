@@ -655,6 +655,7 @@ export default function AdminPortal() {
           chatId: activeChatId,
           text,
           senderType: "admin",
+          clientTime: tempMsg.time,
         }),
       });
       if (res.ok) {
@@ -1790,10 +1791,6 @@ export default function AdminPortal() {
                   )}
                 </tbody>
               </table>
-            </div>
-          </GlassCard>
-        </motion.div>
-      )}
             </div>
           </GlassCard>
         </motion.div>

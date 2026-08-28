@@ -160,7 +160,8 @@ export async function GET(request: Request) {
       });
     }
 
-    const targetUsername = activeUsername || loggedInUsername || "Guest";
+    // For non-admin user chat room, prioritize the authenticated session username
+    const targetUsername = (!isAdmin && loggedInUsername) ? loggedInUsername : (activeUsername || loggedInUsername || "Guest");
 
     let userChat = rawChats.find(
       (chat) =>
@@ -299,14 +300,16 @@ export async function POST(request: Request) {
         chats.push(targetChat);
       }
 
+      const formattedTime = body.clientTime || new Date().toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+
       const newMessage: ChatMessage = {
         id: `msg-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
         sender: "Admin",
         text: text.trim(),
-        time: new Date().toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
+        time: formattedTime,
         senderType: "admin",
       };
 
@@ -356,7 +359,9 @@ export async function POST(request: Request) {
     /*
      * USER MESSAGE
      */
-    const targetUsername = bodyUsername || sender || loggedInUsername || "Guest";
+    const targetUsername = (!isAdmin && loggedInUsername)
+      ? loggedInUsername
+      : (bodyUsername || sender || loggedInUsername || "Guest");
 
     let userChat = chats.find(
       (chat) =>
@@ -370,14 +375,16 @@ export async function POST(request: Request) {
       chats.push(userChat);
     }
 
+    const formattedTime = body.clientTime || new Date().toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
     const newMessage: ChatMessage = {
       id: `msg-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
       sender: targetUsername,
       text: text.trim(),
-      time: new Date().toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      }),
+      time: formattedTime,
       senderType: "user",
     };
 

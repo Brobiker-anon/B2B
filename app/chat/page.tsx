@@ -13,6 +13,7 @@ import { useApp } from "@/context/AppContext";
 
 export default function Chat() {
   const { user, addToast } = useApp();
+  const [sessionUsername, setSessionUsername] = useState<string>("");
   const [chatData, setChatData] = useState<any>(null);
   const [messageInput, setMessageInput] = useState("");
   const [loading, setLoading] = useState(true);
@@ -22,11 +23,31 @@ export default function Chat() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  useEffect(() => {
+    if (user?.username) {
+      setSessionUsername(user.username);
+    } else {
+      try {
+        const saved = localStorage.getItem("brokerage_user");
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed?.username) setSessionUsername(parsed.username);
+        }
+      } catch {}
+      fetch("/api/auth/session")
+        .then((r) => r.json())
+        .then((d) => {
+          if (d.user?.username) setSessionUsername(d.user.username);
+        })
+        .catch(() => {});
+    }
+  }, [user]);
+
   const scrollToBottom = (smooth = true) => {
     messagesEndRef.current?.scrollIntoView({ behavior: smooth ? "smooth" : "auto" });
   };
 
-  const activeUsername = user?.username || "Guest";
+  const activeUsername = user?.username || sessionUsername || "Guest";
 
   // Broadcast typing status to server
   const sendTypingStatus = useCallback(async (isTyping: boolean) => {
@@ -37,6 +58,7 @@ export default function Chat() {
         body: JSON.stringify({
           action: "typing",
           username: activeUsername,
+          chatId: `chat_${activeUsername.toLowerCase().replace(/[\s_-]+/g, "_")}`,
           senderType: "user",
           isTyping,
         }),
@@ -111,12 +133,13 @@ export default function Chat() {
 
     setSending(true);
 
+    const nowTime = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
     const tempId = `temp-${Date.now()}`;
     const optimisticMessage = {
       id: tempId,
       sender: activeUsername,
       text: textToSend,
-      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      time: nowTime,
       senderType: "user",
     };
 
@@ -134,6 +157,8 @@ export default function Chat() {
           text: textToSend,
           senderType: "user",
           username: activeUsername,
+          chatId: `chat_${activeUsername.toLowerCase().replace(/[\s_-]+/g, "_")}`,
+          clientTime: nowTime,
         }),
       });
 
