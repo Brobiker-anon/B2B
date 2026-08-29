@@ -2102,7 +2102,7 @@ export default function AdminPortal() {
                                   : "bg-slate-800 text-slate-100 rounded-bl-none border border-white/10"
                               }`}
                             >
-                              <p className="whitespace-pre-wrap">{msg.text}</p>
+                              <p className="whitespace-pre-wrap break-words break-all sm:break-words select-text">{msg.text}</p>
                             </div>
                           </div>
                           <span className={`text-[9px] text-muted-foreground mt-1 px-1 ${isAdmin ? "text-right" : "text-left ml-8"}`}>

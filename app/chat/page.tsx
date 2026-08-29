@@ -80,7 +80,7 @@ export default function Chat() {
         // Remove any temp optimistic version if real message arrived
         if (!m.id.startsWith("temp-")) {
           for (const [key, val] of msgMap.entries()) {
-            if (key.startsWith("temp-") && val.text === m.text && val.sender === m.sender) {
+            if (key.startsWith("temp-") && val.text === m.text) {
               msgMap.delete(key);
             }
           }
@@ -480,7 +480,7 @@ export default function Chat() {
                           : "bg-slate-800/90 text-white rounded-bl-none border border-white/10 shadow-md"
                       }`}
                     >
-                      <p className="whitespace-pre-wrap">{msg.text}</p>
+                      <p className="whitespace-pre-wrap break-words break-all sm:break-words select-text">{msg.text}</p>
                     </div>
                   </div>
                   <span className={`text-[9px] text-muted-foreground mt-1 font-mono ${isMe ? "text-right mr-1" : "text-left ml-9"}`}>
