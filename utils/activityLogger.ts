@@ -23,7 +23,7 @@ export const MOCK_USERS = [
   { id: "usr-alex-riv", name: "Alex Rivera", email: "alex.r@brokerage.com", role: "System Admin", avatar: "AR", ip: "172.56.21.89", location: "San Francisco, USA", browser: "Firefox 125.0 (Ubuntu Linux)" },
   { id: "usr-dmitri-p", name: "Dmitri Petrov", email: "dmitri.bot@arb-algo.ru", role: "Standard Member", avatar: "DP", ip: "95.108.210.15", location: "Moscow, RU", browser: "Python-urllib/3.10" },
   { id: "usr-emma-wat", name: "Emma Watson", email: "emma.w@gmail.com", role: "Standard Member", avatar: "EW", ip: "198.51.100.42", location: "Toronto, Canada", browser: "Edge 123.0 (Windows 11)" },
-  { id: "sys-daemon", name: "System Daemon", email: "core-node-01@brokerage.com", role: "System Automation", avatar: "SYS", ip: "127.0.0.1", location: "Ashburn AWS Cluster", browser: "Node.js/20.11" },
+  { id: "sys-daemon", name: "System Daemon", email: "core-node-01@brokerage.com", role: "System Automation", avatar: "SYS", ip: "198.51.100.24", location: "Ashburn AWS Cluster", browser: "Node.js/20.11" },
   { id: "usr-anonymous", name: "Anonymous Intruder", email: "unknown@darknet-tor.org", role: "Unauthenticated Guest", avatar: "??", ip: "185.220.101.4", location: "Tor Exit Node (Germany)", browser: "Tor Browser 13.0 (Linux)" }
 ];
 
@@ -352,7 +352,7 @@ export const clearLogs = () => {
     category: "system",
     status: "success",
     severity: "warning",
-    ipAddress: "127.0.0.1",
+    ipAddress: "198.51.100.24",
     location: "Ashburn AWS Cluster",
     browser: "Node.js/20.11",
     timestamp: new Date().toISOString()

@@ -124,10 +124,10 @@ export default function Chat() {
     }
   }, [activeUsername, mergeMessages]);
 
-  // Initial load and backup poll
+  // Initial load and backup poll (real-time push handles instant delivery)
   useEffect(() => {
     fetchChat();
-    const interval = setInterval(fetchChat, 2000);
+    const interval = setInterval(fetchChat, 15000);
     return () => clearInterval(interval);
   }, [fetchChat]);
 

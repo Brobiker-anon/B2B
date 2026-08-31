@@ -138,7 +138,7 @@ export default function Deposit() {
 
   useEffect(() => {
     fetchDeposits();
-    const interval = setInterval(fetchDeposits, 2500); // Continuous live sync with admin actions
+    const interval = setInterval(fetchDeposits, 12000); // Lightweight background sync
     return () => clearInterval(interval);
   }, [fetchDeposits]);
 

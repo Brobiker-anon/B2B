@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getServerLogs, addServerLog, clearServerLogs, parseJsonBody } from "@/utils/serverDb";
 
+export const dynamic = "force-dynamic";
+
 // GET: Fetch all logs (requires active administrative authentication session)
 export async function GET() {
   try {
@@ -29,7 +31,7 @@ export async function GET() {
       );
     }
 
-    const logs = getServerLogs();
+    const logs = await getServerLogs();
     return NextResponse.json({ success: true, logs });
 
   } catch (err) {
@@ -41,7 +43,7 @@ export async function GET() {
   }
 }
 
-// POST: Add a new log entry (open to client navigation and simulation logs posting)
+// POST: Add a new log entry
 export async function POST(request: Request) {
   try {
     const body = await parseJsonBody(request);
@@ -61,9 +63,9 @@ export async function POST(request: Request) {
 
     // Default missing parameters gracefully
     const userAgent = browser || request.headers.get("user-agent") || "Unknown Browser";
-    const ip = ipAddress || request.headers.get("x-forwarded-for")?.split(",")[0] || "127.0.0.1";
+    const ip = ipAddress || request.headers.get("x-forwarded-for")?.split(",")[0] || "Production Client IP";
 
-    const savedLog = addServerLog({
+    const savedLog = await addServerLog({
       userId: userId || "usr-guest",
       userName: userName || "Visitor Session",
       userEmail: userEmail || "visitor@brokerage-platform.com",
@@ -74,7 +76,7 @@ export async function POST(request: Request) {
       status,
       severity,
       ipAddress: ip,
-      location: location || "Local Router Gateway",
+      location: location || "Apex Secure Gateway",
       browser: userAgent,
       details: details || {}
     });
@@ -90,7 +92,7 @@ export async function POST(request: Request) {
   }
 }
 
-// DELETE: Clears the logs file database (requires session verification)
+// DELETE: Clears the logs database (requires session verification)
 export async function DELETE() {
   try {
     const cookieStore = await cookies();
@@ -117,12 +119,12 @@ export async function DELETE() {
       );
     }
 
-    clearServerLogs();
+    await clearServerLogs();
     
     // Log the purge event on the server
     try {
       const admin = JSON.parse(sessionCookie.value);
-      addServerLog({
+      await addServerLog({
         userId: "usr-admin-session",
         userName: admin.username === "admin" ? "Alex Rivera" : admin.username,
         userEmail: admin.email,
@@ -132,8 +134,8 @@ export async function DELETE() {
         category: "security",
         status: "success",
         severity: "critical",
-        ipAddress: "127.0.0.1",
-        location: "System Console Console",
+        ipAddress: "Apex Production Gateway",
+        location: "System Console",
         browser: "Console Process",
         details: { action: "purge_logs_database" }
       });
@@ -149,5 +151,3 @@ export async function DELETE() {
     );
   }
 }
-
-

@@ -1,46 +1,24 @@
-import fs from "fs";
-import os from "os";
-import path from "path";
 import { EventEmitter } from "events";
-
-let cachedDataDir: string | null = null;
-
-/** Resolve a writable data directory (works on serverless production where cwd/data is read-only). */
-const getDataDir = (): string => {
-  if (cachedDataDir) return cachedDataDir;
-
-  const candidates = [
-    path.join(process.cwd(), "data"),
-    path.join(os.tmpdir(), "b2b-data"),
-  ];
-
-  for (const dir of candidates) {
-    try {
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-      }
-      const probe = path.join(dir, ".write-probe");
-      fs.writeFileSync(probe, "ok", "utf-8");
-      fs.unlinkSync(probe);
-      cachedDataDir = dir;
-      return dir;
-    } catch {
-      // try next candidate
-    }
-  }
-
-  cachedDataDir = path.join(os.tmpdir(), "b2b-data");
-  if (!fs.existsSync(cachedDataDir)) {
-    fs.mkdirSync(cachedDataDir, { recursive: true });
-  }
-  return cachedDataDir;
-};
+import {
+  getMongoChats,
+  saveAllMongoChats,
+  saveMongoChat,
+  getMongoUsers,
+  getMongoUser,
+  saveAllMongoUsers,
+  saveMongoUser,
+  deleteMongoUser,
+  getMongoSubmissions,
+  saveMongoSubmission,
+  deleteMongoSubmission,
+  getMongoLogs,
+  addMongoLog,
+  clearMongoLogs,
+} from "./mongoDb";
 
 // Global Event Emitter for real-time SSE stream push
 export const logEmitter = new EventEmitter();
-
-// Max listeners setting
-logEmitter.setMaxListeners(100);
+logEmitter.setMaxListeners(50);
 
 export interface ActivityLog {
   id: string;
@@ -59,130 +37,6 @@ export interface ActivityLog {
   browser: string;
   details?: Record<string, any>;
 }
-
-const filePath = (name: string) => path.join(getDataDir(), name);
-
-const ensureDataFolder = () => {
-  getDataDir();
-};
-
-// Get all logs from server JSON file
-export const getServerLogs = (): ActivityLog[] => {
-  ensureDataFolder();
-  try {
-    const logsPath = filePath("logs.json");
-    if (!fs.existsSync(logsPath)) {
-      const bundledPath = path.join(process.cwd(), "data", "logs.json");
-      if (fs.existsSync(bundledPath)) {
-        try {
-          const bundled = fs.readFileSync(bundledPath, "utf-8");
-          fs.writeFileSync(logsPath, bundled, "utf-8");
-          return JSON.parse(bundled);
-        } catch {
-          // fall through
-        }
-      }
-      const initialLogs: ActivityLog[] = [];
-      fs.writeFileSync(logsPath, JSON.stringify(initialLogs, null, 2), "utf-8");
-      return initialLogs;
-    }
-    const data = fs.readFileSync(logsPath, "utf-8");
-    return JSON.parse(data);
-  } catch (err) {
-    console.error("Error reading server logs:", err);
-    return [];
-  }
-};
-
-// Add a single log to server JSON file
-export const addServerLog = (logData: Omit<ActivityLog, "id" | "timestamp">): ActivityLog => {
-  ensureDataFolder();
-  const logs = getServerLogs();
-  
-  const newLog: ActivityLog = {
-    ...logData,
-    id: `log-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-    timestamp: new Date().toISOString()
-  };
-
-  logs.unshift(newLog); // Keep latest logs at top
-
-  // Keep list at maximum 200 logs to avoid filesystem exhaustion
-  if (logs.length > 200) {
-    logs.length = 200;
-  }
-
-  try {
-    fs.writeFileSync(filePath("logs.json"), JSON.stringify(logs, null, 2), "utf-8");
-    // Emit new-log event to any open EventSource handlers
-    logEmitter.emit("new-log", newLog);
-  } catch (err) {
-    console.error("Error writing server log:", err);
-  }
-
-  return newLog;
-};
-
-// Purge all logs
-export const clearServerLogs = () => {
-  ensureDataFolder();
-  try {
-    const cleared: ActivityLog[] = [];
-    fs.writeFileSync(filePath("logs.json"), JSON.stringify(cleared, null, 2), "utf-8");
-    logEmitter.emit("clear-logs");
-  } catch (err) {
-    console.error("Error clearing server logs:", err);
-  }
-};
-
-// Utility to parse request body safely in API routes
-export async function parseJsonBody(request: Request) {
-  try {
-    return await request.json();
-  } catch {
-    return {};
-  }
-}
-
-// Verify Admin login from server users database
-export const getAdminUsers = () => {
-  ensureDataFolder();
-  try {
-    const usersPath = filePath("users.json");
-    if (!fs.existsSync(usersPath)) {
-      // Seed from bundled data on first run (e.g. fresh serverless instance)
-      const bundledPath = path.join(process.cwd(), "data", "users.json");
-      if (fs.existsSync(bundledPath)) {
-        try {
-          const bundled = fs.readFileSync(bundledPath, "utf-8");
-          fs.writeFileSync(usersPath, bundled, "utf-8");
-          return JSON.parse(bundled);
-        } catch {
-          // fall through to empty list
-        }
-      }
-      const defaultAdmins: any[] = [];
-      fs.writeFileSync(usersPath, JSON.stringify(defaultAdmins, null, 2), "utf-8");
-      return defaultAdmins;
-    }
-    const data = fs.readFileSync(usersPath, "utf-8");
-    return JSON.parse(data);
-  } catch (err) {
-    console.error("Error reading admin users:", err);
-    return [];
-  }
-};
-
-// Save updated admin users list to disk
-export const saveAdminUsers = (users: any[]) => {
-  ensureDataFolder();
-  try {
-    fs.writeFileSync(filePath("users.json"), JSON.stringify(users, null, 2), "utf-8");
-  } catch (err) {
-    console.error("Error saving admin users:", err);
-  }
-};
-
 
 export interface ChatMessage {
   id: string;
@@ -211,97 +65,6 @@ export interface SupportChat {
   typing?: TypingStatus;
 }
 
-import {
-  getMongoChats,
-  saveAllMongoChats,
-  saveMongoChat,
-  getMongoUsers,
-  saveAllMongoUsers,
-  getMongoSubmissions,
-  saveMongoSubmission,
-  deleteMongoSubmission,
-  getMongoLogs,
-  addMongoLog,
-} from "./mongoDb";
-
-export const getChatsAsync = async (): Promise<SupportChat[]> => {
-  try {
-    const mongoChats = await getMongoChats();
-    if (mongoChats && mongoChats.length > 0) {
-      globalThis.__chats_cache__ = mongoChats;
-      return mongoChats;
-    }
-  } catch (err) {
-    console.error("MongoDB getChats error, falling back to local:", err);
-  }
-  return getChats();
-};
-
-export const saveChatsAsync = async (chats: SupportChat[]) => {
-  saveChats(chats);
-  try {
-    await saveAllMongoChats(chats);
-  } catch (err) {
-    console.error("MongoDB saveChats error:", err);
-  }
-};
-
-export const saveSingleChatAsync = async (chat: SupportChat) => {
-  try {
-    await saveMongoChat(chat);
-  } catch (err) {
-    console.error("MongoDB saveSingleChat error:", err);
-  }
-};
-
-export const getChats = (): SupportChat[] => {
-  ensureDataFolder();
-  try {
-    const chatsPath = filePath("chats.json");
-    if (!fs.existsSync(chatsPath)) {
-      const bundledPath = path.join(process.cwd(), "data", "chats.json");
-      if (fs.existsSync(bundledPath)) {
-        try {
-          const bundled = fs.readFileSync(bundledPath, "utf-8");
-          const parsed = JSON.parse(bundled);
-          fs.writeFileSync(chatsPath, bundled, "utf-8");
-          globalThis.__chats_cache__ = parsed;
-          return parsed;
-        } catch {
-          // fall through
-        }
-      }
-      const initialChats: SupportChat[] = [];
-      fs.writeFileSync(chatsPath, JSON.stringify(initialChats, null, 2), "utf-8");
-      globalThis.__chats_cache__ = initialChats;
-      return initialChats;
-    }
-    const data = fs.readFileSync(chatsPath, "utf-8");
-    const parsed = JSON.parse(data);
-    globalThis.__chats_cache__ = parsed;
-    return parsed;
-  } catch (err) {
-    if (globalThis.__chats_cache__) {
-      return globalThis.__chats_cache__;
-    }
-    console.error("Error reading chats file:", err);
-    return [];
-  }
-};
-
-export const saveChats = (chats: SupportChat[]) => {
-  ensureDataFolder();
-  globalThis.__chats_cache__ = chats;
-  try {
-    fs.writeFileSync(filePath("chats.json"), JSON.stringify(chats, null, 2), "utf-8");
-  } catch (err) {
-    console.error("Error writing chats file:", err);
-  }
-  // Async save to mongo in background
-  saveAllMongoChats(chats).catch(() => {});
-};
-
-
 export interface Submission {
   id: string;
   type: "deposit" | "withdraw";
@@ -317,103 +80,106 @@ export interface Submission {
   createdAt: string;
 }
 
-export const getSubmissions = (): Submission[] => {
-  ensureDataFolder();
+// In-Memory Fast Cache for serverless requests
+declare global {
+  var __users_cache__: any[] | undefined;
+  var __chats_cache__: SupportChat[] | undefined;
+  var __submissions_cache__: Submission[] | undefined;
+  var __logs_cache__: ActivityLog[] | undefined;
+}
+
+// -------------------------------------------------------------
+// LOGS REPOSITORY
+// -------------------------------------------------------------
+export const getServerLogs = async (): Promise<ActivityLog[]> => {
   try {
-    const submissionsPath = filePath("submissions.json");
-    if (!fs.existsSync(submissionsPath)) {
-      const bundledPath = path.join(process.cwd(), "data", "submissions.json");
-      if (fs.existsSync(bundledPath)) {
-        try {
-          const bundled = fs.readFileSync(bundledPath, "utf-8");
-          fs.writeFileSync(submissionsPath, bundled, "utf-8");
-          return JSON.parse(bundled);
-        } catch {
-          // fall through
-        }
-      }
-      fs.writeFileSync(submissionsPath, "[]", "utf-8");
-      return [];
+    const mongoLogs = await getMongoLogs();
+    if (mongoLogs && mongoLogs.length > 0) {
+      globalThis.__logs_cache__ = mongoLogs;
+      return mongoLogs;
     }
-    return JSON.parse(fs.readFileSync(submissionsPath, "utf-8"));
   } catch (err) {
-    console.error("Error reading submissions:", err);
-    return [];
+    console.error("Error reading logs from MongoDB:", err);
   }
+  return globalThis.__logs_cache__ || [];
 };
 
-export const addSubmission = (submission: Omit<Submission, "id" | "createdAt">): Submission => {
-  ensureDataFolder();
-  const submissions = getSubmissions();
-  const newSubmission: Submission = {
-    ...submission,
-    id: `sub-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-    createdAt: new Date().toISOString(),
+export const addServerLog = async (logData: Omit<ActivityLog, "id" | "timestamp">): Promise<ActivityLog> => {
+  const newLog: ActivityLog = {
+    ...logData,
+    id: `log-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+    timestamp: new Date().toISOString(),
   };
-  submissions.unshift(newSubmission);
+
+  if (!globalThis.__logs_cache__) globalThis.__logs_cache__ = [];
+  globalThis.__logs_cache__.unshift(newLog);
+  if (globalThis.__logs_cache__.length > 100) {
+    globalThis.__logs_cache__.length = 100;
+  }
+
+  // Persist to MongoDB Atlas asynchronously
+  addMongoLog(newLog).catch((err) => console.error("Error saving log to MongoDB:", err));
+
+  // Push to active SSE subscribers
   try {
-    fs.writeFileSync(filePath("submissions.json"), JSON.stringify(submissions, null, 2), "utf-8");
-  } catch (err) {
-    console.error("Error writing submissions:", err);
-  }
-  return newSubmission;
+    logEmitter.emit("new-log", newLog);
+  } catch {}
+
+  return newLog;
 };
 
-export const saveSubmissions = (submissions: Submission[]) => {
-  ensureDataFolder();
+export const clearServerLogs = async () => {
+  globalThis.__logs_cache__ = [];
+  clearMongoLogs().catch((err) => console.error("Error clearing logs in MongoDB:", err));
   try {
-    fs.writeFileSync(filePath("submissions.json"), JSON.stringify(submissions, null, 2), "utf-8");
+    logEmitter.emit("clear-logs");
+  } catch {}
+};
+
+// Utility to parse request body safely
+export async function parseJsonBody(request: Request) {
+  try {
+    return await request.json();
+  } catch {
+    return {};
+  }
+}
+
+// -------------------------------------------------------------
+// ADMIN / USER REPOSITORY (MongoDB Atlas)
+// -------------------------------------------------------------
+export const getAdminUsers = async (): Promise<any[]> => {
+  try {
+    const mongoUsers = await getMongoUsers();
+    if (mongoUsers && mongoUsers.length > 0) {
+      globalThis.__users_cache__ = mongoUsers;
+      return mongoUsers;
+    }
   } catch (err) {
-    console.error("Error writing submissions file:", err);
+    console.error("Error fetching users from MongoDB:", err);
   }
+  return globalThis.__users_cache__ || [];
 };
 
-export const updateSubmissionStatus = (id: string, status: "Approved" | "Pending" | "Cancelled", note?: string): Submission | null => {
-  const submissions = getSubmissions();
-  const index = submissions.findIndex((s) => s.id === id);
-  if (index === -1) return null;
+export const saveAdminUsers = async (users: any[]) => {
+  globalThis.__users_cache__ = users;
+  saveAllMongoUsers(users).catch((err) => console.error("Error batch saving users to MongoDB:", err));
+};
 
-  submissions[index].status = status;
-  if (note) {
-    submissions[index].details = {
-      ...(submissions[index].details || {}),
-      adminNote: note,
-      statusUpdatedAt: new Date().toISOString(),
-    };
+export const saveSingleUser = async (user: any) => {
+  if (!globalThis.__users_cache__) globalThis.__users_cache__ = [];
+  const idx = globalThis.__users_cache__.findIndex(
+    (u) => u.username?.toLowerCase() === user.username?.toLowerCase()
+  );
+  if (idx > -1) {
+    globalThis.__users_cache__[idx] = user;
+  } else {
+    globalThis.__users_cache__.push(user);
   }
-  saveSubmissions(submissions);
-  return submissions[index];
+  await saveMongoUser(user);
 };
 
-export const deleteSubmission = (id: string): boolean => {
-  ensureDataFolder();
-  const submissions = getSubmissions();
-  const filtered = submissions.filter((s) => s.id !== id);
-  if (filtered.length === submissions.length) return false;
-  saveSubmissions(filtered);
-  return true;
-};
-
-export const updateSubmission = (id: string, updates: Partial<Submission>): Submission | null => {
-  ensureDataFolder();
-  const submissions = getSubmissions();
-  const index = submissions.findIndex((s) => s.id === id);
-  if (index === -1) return null;
-
-  submissions[index] = {
-    ...submissions[index],
-    ...updates,
-    details: {
-      ...(submissions[index].details || {}),
-      ...(updates.details || {}),
-      updatedAt: new Date().toISOString(),
-    },
-  };
-  saveSubmissions(submissions);
-  return submissions[index];
-};
-
-export const updateUserBalance = (
+export const updateUserBalance = async (
   username: string,
   operation: "add" | "deduct" | "set",
   asset: "realBalance" | "usdtBalance" | "btcBalance" | "demoBalance" | "stakedBalance" | "miningEarnings",
@@ -421,11 +187,19 @@ export const updateUserBalance = (
   note?: string,
   skipSubmissionLog?: boolean
 ) => {
-  const users = getAdminUsers();
+  const users = await getAdminUsers();
   const user = users.find((u: any) => u.username?.toLowerCase() === username.toLowerCase());
   if (!user) return null;
 
-  const currentVal = typeof user[asset] === "number" ? user[asset] : (asset === "realBalance" || asset === "usdtBalance" ? (user.username.toLowerCase() === "jjj" ? 100000 : 0) : 0);
+  const isMaster = user.username.toLowerCase() === "jjj";
+  const currentVal =
+    typeof user[asset] === "number"
+      ? user[asset]
+      : asset === "realBalance" || asset === "usdtBalance"
+      ? isMaster
+        ? 100000
+        : 0
+      : 0;
 
   let newVal = currentVal;
   if (operation === "add") {
@@ -437,13 +211,11 @@ export const updateUserBalance = (
   }
 
   user[asset] = newVal;
-  // Keep realBalance and usdtBalance in sync if one is changed
   if (asset === "realBalance") user.usdtBalance = newVal;
   if (asset === "usdtBalance") user.realBalance = newVal;
 
-  saveAdminUsers(users);
+  await saveSingleUser(user);
 
-  // Automatically record money added by admin into the deposit history ledger
   if (operation === "add" && !skipSubmissionLog) {
     try {
       const isBtc = asset === "btcBalance";
@@ -453,7 +225,7 @@ export const updateUserBalance = (
       const usdTotal = isBtc ? (amount * 63000).toFixed(2) : amount.toFixed(2);
       const refCode = "ADM" + Math.floor(100000 + Math.random() * 900000);
 
-      addSubmission({
+      await addSubmission({
         type: "deposit",
         username: user.username,
         email: user.email || `${user.username}@user.net`,
@@ -486,7 +258,7 @@ export const updateUserBalance = (
     category: "wallet",
     status: "success",
     severity: "info",
-    ipAddress: "127.0.0.1",
+    ipAddress: "Apex Production Gateway",
     location: "Admin Control",
     browser: "Admin Dashboard",
     details: {
@@ -497,26 +269,149 @@ export const updateUserBalance = (
       newBalance: newVal,
       note: note || "Admin numerical balance adjustment",
     },
-  });
+  }).catch(() => {});
 
   return user;
 };
 
-export const deleteAdminUser = (username: string): boolean => {
-  const users = getAdminUsers();
+export const deleteAdminUser = async (username: string): Promise<boolean> => {
+  const users = await getAdminUsers();
   const filtered = users.filter((u: any) => u.username?.toLowerCase() !== username.toLowerCase());
-  if (filtered.length === users.length) return false;
-  saveAdminUsers(filtered);
-  return true;
+  globalThis.__users_cache__ = filtered;
+  return await deleteMongoUser(username);
 };
 
-export const updateAdminUser = (username: string, updates: Record<string, any>) => {
-  const users = getAdminUsers();
+export const updateAdminUser = async (username: string, updates: Record<string, any>) => {
+  const users = await getAdminUsers();
   const user = users.find((u: any) => u.username?.toLowerCase() === username.toLowerCase());
   if (!user) return null;
 
   Object.assign(user, updates);
-  saveAdminUsers(users);
+  await saveSingleUser(user);
   return user;
 };
 
+// -------------------------------------------------------------
+// CHATS REPOSITORY (MongoDB Atlas)
+// -------------------------------------------------------------
+export const getChatsAsync = async (): Promise<SupportChat[]> => {
+  try {
+    const mongoChats = await getMongoChats();
+    if (mongoChats && mongoChats.length > 0) {
+      globalThis.__chats_cache__ = mongoChats;
+      return mongoChats;
+    }
+  } catch (err) {
+    console.error("MongoDB getChats error:", err);
+  }
+  return globalThis.__chats_cache__ || [];
+};
+
+export const saveChatsAsync = async (chats: SupportChat[]) => {
+  globalThis.__chats_cache__ = chats;
+  saveAllMongoChats(chats).catch((err) => console.error("MongoDB saveChats error:", err));
+};
+
+export const saveSingleChatAsync = async (chat: SupportChat) => {
+  if (!globalThis.__chats_cache__) globalThis.__chats_cache__ = [];
+  const idx = globalThis.__chats_cache__.findIndex((c) => c.id === chat.id);
+  if (idx > -1) {
+    globalThis.__chats_cache__[idx] = chat;
+  } else {
+    globalThis.__chats_cache__.push(chat);
+  }
+  saveMongoChat(chat).catch((err) => console.error("MongoDB saveSingleChat error:", err));
+};
+
+export const getChats = (): SupportChat[] => {
+  return globalThis.__chats_cache__ || [];
+};
+
+export const saveChats = (chats: SupportChat[]) => {
+  saveChatsAsync(chats);
+};
+
+// -------------------------------------------------------------
+// SUBMISSIONS REPOSITORY (MongoDB Atlas)
+// -------------------------------------------------------------
+export const getSubmissions = async (): Promise<Submission[]> => {
+  try {
+    const mongoSubs = await getMongoSubmissions();
+    if (mongoSubs && mongoSubs.length > 0) {
+      globalThis.__submissions_cache__ = mongoSubs;
+      return mongoSubs;
+    }
+  } catch (err) {
+    console.error("Error reading submissions from MongoDB:", err);
+  }
+  return globalThis.__submissions_cache__ || [];
+};
+
+export const addSubmission = async (submission: Omit<Submission, "id" | "createdAt">): Promise<Submission> => {
+  const newSubmission: Submission = {
+    ...submission,
+    id: `sub-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+    createdAt: new Date().toISOString(),
+  };
+
+  if (!globalThis.__submissions_cache__) globalThis.__submissions_cache__ = [];
+  globalThis.__submissions_cache__.unshift(newSubmission);
+
+  await saveMongoSubmission(newSubmission);
+  return newSubmission;
+};
+
+export const saveSubmissions = async (submissions: Submission[]) => {
+  globalThis.__submissions_cache__ = submissions;
+  for (const sub of submissions) {
+    saveMongoSubmission(sub).catch(() => {});
+  }
+};
+
+export const updateSubmissionStatus = async (
+  id: string,
+  status: "Approved" | "Pending" | "Cancelled",
+  note?: string
+): Promise<Submission | null> => {
+  const submissions = await getSubmissions();
+  const index = submissions.findIndex((s) => s.id === id);
+  if (index === -1) return null;
+
+  submissions[index].status = status;
+  if (note) {
+    submissions[index].details = {
+      ...(submissions[index].details || {}),
+      adminNote: note,
+      statusUpdatedAt: new Date().toISOString(),
+    };
+  }
+  await saveMongoSubmission(submissions[index]);
+  globalThis.__submissions_cache__ = submissions;
+  return submissions[index];
+};
+
+export const deleteSubmission = async (id: string): Promise<boolean> => {
+  const submissions = await getSubmissions();
+  const filtered = submissions.filter((s) => s.id !== id);
+  globalThis.__submissions_cache__ = filtered;
+  return await deleteMongoSubmission(id);
+};
+
+export const updateSubmission = async (id: string, updates: Partial<Submission>): Promise<Submission | null> => {
+  const submissions = await getSubmissions();
+  const index = submissions.findIndex((s) => s.id === id);
+  if (index === -1) return null;
+
+  submissions[index] = {
+    ...submissions[index],
+    ...updates,
+    details: {
+      ...(submissions[index].details || {}),
+      ...(updates.details || {}),
+      updatedAt: new Date().toISOString(),
+    },
+  };
+  await saveMongoSubmission(submissions[index]);
+  globalThis.__submissions_cache__ = submissions;
+  return submissions[index];
+};

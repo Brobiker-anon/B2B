@@ -5,23 +5,6 @@ import {
   addServerLog,
   parseJsonBody,
 } from "@/utils/serverDb";
-import fs from "fs";
-import path from "path";
-
-const USERS_FILE_PATH = path.join(process.cwd(), "data", "users.json");
-
-const getRegularUsers = () => {
-  try {
-    if (!fs.existsSync(USERS_FILE_PATH)) {
-      return [];
-    }
-    const data = fs.readFileSync(USERS_FILE_PATH, "utf-8");
-    return JSON.parse(data);
-  } catch (err) {
-    console.error("Error reading users:", err);
-    return [];
-  }
-};
 
 export const dynamic = "force-dynamic";
 
@@ -39,21 +22,13 @@ export async function POST(request: Request) {
       );
     }
 
-    const admins = getAdminUsers();
-    const users = getRegularUsers();
+    const users = await getAdminUsers();
 
     const cleanInput = String(username)
       .toLowerCase()
       .trim();
 
-    let user = admins.find(
-      (a: any) =>
-        (
-          a.username?.toLowerCase() === cleanInput ||
-          a.email?.toLowerCase() === cleanInput
-        ) &&
-        a.password === password
-    ) || users.find(
+    const user = users.find(
       (u: any) =>
         (
           u.username?.toLowerCase() === cleanInput ||
@@ -72,7 +47,7 @@ export async function POST(request: Request) {
         ?.split(",")[0]
         ?.trim() ||
       request.headers.get("x-real-ip") ||
-      "127.0.0.1";
+      "Production Client IP";
 
     if (!user) {
       addServerLog({
@@ -86,13 +61,13 @@ export async function POST(request: Request) {
         status: "failed",
         severity: "warning",
         ipAddress,
-        location: "Unknown",
+        location: "Apex Gateway",
         browser: userAgent,
         details: {
           attemptedID: username,
           code: "AUTH_FAILED",
         },
-      });
+      }).catch(() => {});
 
       return NextResponse.json(
         {
@@ -119,7 +94,8 @@ export async function POST(request: Request) {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
         sameSite: "lax",
-        maxAge: 60 * 60 * 2,
+        maxAge: 60 * 60 * 24 * 365, // 1 Year persistent login
+        expires: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
         path: "/",
       }
     );
@@ -135,13 +111,13 @@ export async function POST(request: Request) {
       status: "success",
       severity: "info",
       ipAddress,
-      location: "Unknown",
+      location: "Apex Production Gateway",
       browser: userAgent,
       details: {
         role: user.role,
         protocol: "Secured Handshake",
       },
-    });
+    }).catch(() => {});
 
     return NextResponse.json({
       success: true,

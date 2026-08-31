@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { getAdminUsers, addServerLog, parseJsonBody, saveAdminUsers } from "@/utils/serverDb";
+import { getAdminUsers, addServerLog, parseJsonBody, saveSingleUser } from "@/utils/serverDb";
+
+export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
   try {
@@ -47,10 +49,10 @@ export async function POST(request: Request) {
       );
     }
 
-    const admins = getAdminUsers();
+    const users = await getAdminUsers();
 
     // Check for duplicate username
-    const existingUsername = admins.find(
+    const existingUsername = users.find(
       (a: any) => a.username.toLowerCase() === username.trim().toLowerCase()
     );
     if (existingUsername) {
@@ -61,7 +63,7 @@ export async function POST(request: Request) {
     }
 
     // Check for duplicate email
-    const existingEmail = admins.find(
+    const existingEmail = users.find(
       (a: any) => a.email.toLowerCase() === email.trim().toLowerCase()
     );
     if (existingEmail) {
@@ -96,8 +98,7 @@ export async function POST(request: Request) {
       createdAt: new Date().toISOString()
     };
 
-    admins.push(newUser);
-    saveAdminUsers(admins);
+    await saveSingleUser(newUser);
 
     // Auto-login the newly registered user
     const sessionData = JSON.stringify({
@@ -112,13 +113,14 @@ export async function POST(request: Request) {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
-      maxAge: 60 * 60 * 2, // 2 hours
+      maxAge: 60 * 60 * 24 * 365, // 1 Year persistent login
+      expires: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
       path: "/"
     });
 
     const userAgent = request.headers.get("user-agent") || "Unknown Browser";
     const ipAddress =
-      request.headers.get("x-forwarded-for")?.split(",")[0] || "127.0.0.1";
+      request.headers.get("x-forwarded-for")?.split(",")[0] || "Production Client IP";
 
     addServerLog({
       userId: `usr-${newUser.username}`,
@@ -131,7 +133,7 @@ export async function POST(request: Request) {
       status: "success",
       severity: "info",
       ipAddress,
-      location: "Unknown",
+      location: "Apex Registration Gateway",
       browser: userAgent,
       details: {
         role: newUser.role,
@@ -141,7 +143,7 @@ export async function POST(request: Request) {
         currency: newUser.currency,
         referralCode: newUser.referralCode,
       }
-    });
+    }).catch(() => {});
 
     return NextResponse.json({
       success: true,
@@ -160,5 +162,3 @@ export async function POST(request: Request) {
     );
   }
 }
-
-

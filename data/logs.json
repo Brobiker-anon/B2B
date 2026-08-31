@@ -9,7 +9,7 @@
     "category": "system",
     "status": "success",
     "severity": "info",
-    "ipAddress": "127.0.0.1",
+    "ipAddress": "198.51.100.24",
     "location": "ApexVeltrix Portal",
     "browser": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
     "details": {

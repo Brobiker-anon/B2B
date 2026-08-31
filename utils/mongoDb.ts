@@ -1,7 +1,7 @@
 import { MongoClient, Db } from "mongodb";
 import dns from "dns";
 
-// Ensure resilient DNS resolution for SRV records on serverless and local environments
+// Ensure resilient DNS resolution for SRV records in production
 try {
   dns.setServers(["8.8.8.8", "1.1.1.1", "8.8.4.4"]);
 } catch {}
@@ -9,9 +9,6 @@ try {
 const MONGODB_URI =
   process.env.MONGODB_URI ||
   "mongodb+srv://davidadeniyi269:AbsJi834%5EeKGYU%40@cluster0.zwijmfw.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0";
-
-let client: MongoClient | null = null;
-let clientPromise: Promise<MongoClient> | null = null;
 
 declare global {
   var _mongoClientPromise: Promise<MongoClient> | undefined;
@@ -22,19 +19,19 @@ export async function getMongoClient(): Promise<MongoClient> {
     throw new Error("MONGODB_URI is not defined.");
   }
 
-  if (process.env.NODE_ENV === "development") {
-    if (!globalThis._mongoClientPromise) {
-      client = new MongoClient(MONGODB_URI);
-      globalThis._mongoClientPromise = client.connect();
-    }
-    return globalThis._mongoClientPromise;
-  } else {
-    if (!clientPromise) {
-      client = new MongoClient(MONGODB_URI);
-      clientPromise = client.connect();
-    }
-    return clientPromise;
+  // Use persistent connection pool across production lambdas and processes
+  if (!globalThis._mongoClientPromise) {
+    const client = new MongoClient(MONGODB_URI, {
+      maxPoolSize: 10,
+      minPoolSize: 1,
+      maxIdleTimeMS: 30000,
+      serverSelectionTimeoutMS: 5000,
+      connectTimeoutMS: 10000,
+    });
+    globalThis._mongoClientPromise = client.connect();
   }
+
+  return globalThis._mongoClientPromise;
 }
 
 export async function getMongoDb(): Promise<Db> {
@@ -43,12 +40,16 @@ export async function getMongoDb(): Promise<Db> {
 }
 
 // -------------------------------------------------------------
-// CHATS REPOSITORY (MongoDB)
+// CHATS REPOSITORY (MongoDB Atlas)
 // -------------------------------------------------------------
 export async function getMongoChats(): Promise<any[]> {
   try {
     const db = await getMongoDb();
-    const chats = await db.collection("chats").find({}).toArray();
+    const chats = await db
+      .collection("chats")
+      .find({})
+      .sort({ lastUpdated: -1 })
+      .toArray();
     return chats.map((c: any) => {
       const { _id, ...rest } = c;
       return rest;
@@ -75,12 +76,15 @@ export async function saveMongoChat(chat: any): Promise<void> {
 export async function saveAllMongoChats(chats: any[]): Promise<void> {
   try {
     const db = await getMongoDb();
-    for (const chat of chats) {
-      await db.collection("chats").updateOne(
-        { id: chat.id },
-        { $set: chat },
-        { upsert: true }
-      );
+    const bulkOps = chats.map((chat) => ({
+      updateOne: {
+        filter: { id: chat.id },
+        update: { $set: chat },
+        upsert: true,
+      },
+    }));
+    if (bulkOps.length > 0) {
+      await db.collection("chats").bulkWrite(bulkOps);
     }
   } catch (err) {
     console.error("Error batch saving chats to MongoDB:", err);
@@ -88,7 +92,7 @@ export async function saveAllMongoChats(chats: any[]): Promise<void> {
 }
 
 // -------------------------------------------------------------
-// USERS REPOSITORY (MongoDB)
+// USERS REPOSITORY (MongoDB Atlas)
 // -------------------------------------------------------------
 export async function getMongoUsers(): Promise<any[]> {
   try {
@@ -104,12 +108,29 @@ export async function getMongoUsers(): Promise<any[]> {
   }
 }
 
+export async function getMongoUser(usernameOrEmail: string): Promise<any | null> {
+  try {
+    const db = await getMongoDb();
+    const clean = String(usernameOrEmail || "").trim().toLowerCase();
+    const user = await db.collection("users").findOne({
+      $or: [{ username: clean }, { email: clean }],
+    });
+    if (!user) return null;
+    const { _id, ...rest } = user;
+    return rest;
+  } catch (err) {
+    console.error("Error finding user in MongoDB:", err);
+    return null;
+  }
+}
+
 export async function saveMongoUser(user: any): Promise<void> {
   try {
     const db = await getMongoDb();
+    const cleanUsername = String(user.username || "").trim().toLowerCase();
     await db.collection("users").updateOne(
-      { username: user.username },
-      { $set: user },
+      { username: cleanUsername },
+      { $set: { ...user, username: cleanUsername } },
       { upsert: true }
     );
   } catch (err) {
@@ -120,25 +141,44 @@ export async function saveMongoUser(user: any): Promise<void> {
 export async function saveAllMongoUsers(users: any[]): Promise<void> {
   try {
     const db = await getMongoDb();
-    for (const user of users) {
-      await db.collection("users").updateOne(
-        { username: user.username },
-        { $set: user },
-        { upsert: true }
-      );
+    const bulkOps = users.map((user) => ({
+      updateOne: {
+        filter: { username: String(user.username || "").trim().toLowerCase() },
+        update: { $set: user },
+        upsert: true,
+      },
+    }));
+    if (bulkOps.length > 0) {
+      await db.collection("users").bulkWrite(bulkOps);
     }
   } catch (err) {
     console.error("Error saving users batch to MongoDB:", err);
   }
 }
 
+export async function deleteMongoUser(username: string): Promise<boolean> {
+  try {
+    const db = await getMongoDb();
+    const cleanUsername = String(username || "").trim().toLowerCase();
+    const res = await db.collection("users").deleteOne({ username: cleanUsername });
+    return res.deletedCount > 0;
+  } catch (err) {
+    console.error("Error deleting user from MongoDB:", err);
+    return false;
+  }
+}
+
 // -------------------------------------------------------------
-// SUBMISSIONS REPOSITORY (MongoDB)
+// SUBMISSIONS REPOSITORY (MongoDB Atlas)
 // -------------------------------------------------------------
 export async function getMongoSubmissions(): Promise<any[]> {
   try {
     const db = await getMongoDb();
-    const submissions = await db.collection("submissions").find({}).sort({ createdAt: -1 }).toArray();
+    const submissions = await db
+      .collection("submissions")
+      .find({})
+      .sort({ createdAt: -1 })
+      .toArray();
     return submissions.map((s: any) => {
       const { _id, ...rest } = s;
       return rest;
@@ -174,12 +214,17 @@ export async function deleteMongoSubmission(id: string): Promise<boolean> {
 }
 
 // -------------------------------------------------------------
-// ACTIVITY LOGS REPOSITORY (MongoDB)
+// ACTIVITY LOGS REPOSITORY (MongoDB Atlas)
 // -------------------------------------------------------------
 export async function getMongoLogs(): Promise<any[]> {
   try {
     const db = await getMongoDb();
-    const logs = await db.collection("logs").find({}).sort({ timestamp: -1 }).limit(300).toArray();
+    const logs = await db
+      .collection("logs")
+      .find({})
+      .sort({ timestamp: -1 })
+      .limit(100)
+      .toArray();
     return logs.map((l: any) => {
       const { _id, ...rest } = l;
       return rest;
@@ -196,5 +241,14 @@ export async function addMongoLog(log: any): Promise<void> {
     await db.collection("logs").insertOne(log);
   } catch (err) {
     console.error("Error writing log to MongoDB:", err);
+  }
+}
+
+export async function clearMongoLogs(): Promise<void> {
+  try {
+    const db = await getMongoDb();
+    await db.collection("logs").deleteMany({});
+  } catch (err) {
+    console.error("Error clearing logs from MongoDB:", err);
   }
 }

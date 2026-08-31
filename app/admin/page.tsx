@@ -240,7 +240,7 @@ export default function AdminPortal() {
       } catch {} finally {
         isAdminPollingRef.current = false;
       }
-    }, 2000);
+    }, 10000);
     return () => clearInterval(interval);
   }, [isAuthenticated, activeTab]);
 

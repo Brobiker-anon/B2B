@@ -30,7 +30,7 @@ export async function GET(request: Request) {
     const queryType = searchParams.get("type");
     const session = await getSession();
 
-    let submissions = getSubmissions();
+    let submissions = await getSubmissions();
 
     if (session?.role === "Administrator" && !queryUser) {
       if (queryType) {
@@ -102,7 +102,7 @@ export async function POST(request: Request) {
     const finalAsset = amountAsset || "USDT";
     const finalTotalUsd = totalUsd || (finalAsset === "BTC" ? `$${(parseFloat(finalAmountVal) * 63000).toFixed(2)}` : `$${parseFloat(finalAmountVal).toFixed(2)}`);
 
-    const submission = addSubmission({
+    const submission = await addSubmission({
       type: normalizedType,
       username: targetUsername,
       email: email || session?.email || `${targetUsername}@user.net`,
@@ -126,7 +126,7 @@ export async function POST(request: Request) {
       const amountToCredit = finalAsset === "BTC" ? rawAmt : (parseFloat(finalTotalUsd.replace(/[^0-9.]/g, "")) || rawAmt);
 
       if (amountToCredit > 0) {
-        updateUserBalance(
+        await updateUserBalance(
           targetUsername,
           "add",
           assetToCredit,
@@ -147,11 +147,11 @@ export async function POST(request: Request) {
       category: "wallet",
       status: "success",
       severity: "info",
-      ipAddress: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "127.0.0.1",
+      ipAddress: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "Production Client IP",
       location: isAdmin ? "Admin Console" : "ApexVeltrix Portal",
-      browser: request.headers.get("user-agent") || "Unknown",
+      browser: request.headers.get("user-agent") || "Unknown Browser",
       details: submission,
-    });
+    }).catch(() => {});
 
     return NextResponse.json({ success: true, submission });
   } catch (error) {
@@ -174,7 +174,7 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: "Submission ID is required." }, { status: 400 });
     }
 
-    const updated = updateSubmission(id, updates);
+    const updated = await updateSubmission(id, updates);
     if (!updated) {
       return NextResponse.json({ error: "Submission not found." }, { status: 404 });
     }
@@ -189,11 +189,11 @@ export async function PUT(request: Request) {
       category: "wallet",
       status: "success",
       severity: "info",
-      ipAddress: "127.0.0.1",
+      ipAddress: "Apex Production Gateway",
       location: "ApexVeltrix Admin Portal",
       browser: "Admin Action",
       details: { id, updates },
-    });
+    }).catch(() => {});
 
     return NextResponse.json({ success: true, submission: updated });
   } catch (error) {
@@ -215,7 +215,7 @@ export async function PATCH(request: Request) {
       );
     }
 
-    const updated = updateSubmissionStatus(id, status as "Approved" | "Pending" | "Cancelled", note);
+    const updated = await updateSubmissionStatus(id, status as "Approved" | "Pending" | "Cancelled", note);
     if (!updated) {
       return NextResponse.json({ error: "Submission not found." }, { status: 404 });
     }
@@ -236,7 +236,7 @@ export async function PATCH(request: Request) {
       const amountToCredit = updated.amountAsset === "BTC" ? rawAmt : usdVal || rawAmt;
 
       if (amountToCredit > 0 && updated.username) {
-        updateUserBalance(
+        await updateUserBalance(
           updated.username,
           "add",
           assetToCredit,
@@ -257,7 +257,7 @@ export async function PATCH(request: Request) {
       category: "wallet",
       status: "success",
       severity: "info",
-      ipAddress: "127.0.0.1",
+      ipAddress: "Apex Production Gateway",
       location: "ApexVeltrix Admin Portal",
       browser: "Admin Action",
       details: {
@@ -266,7 +266,7 @@ export async function PATCH(request: Request) {
         newStatus: status,
         note: note || "",
       },
-    });
+    }).catch(() => {});
 
     return NextResponse.json({ success: true, submission: updated });
   } catch (error) {
@@ -289,7 +289,7 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: "Submission ID is required." }, { status: 400 });
     }
 
-    const deleted = deleteSubmission(id);
+    const deleted = await deleteSubmission(id);
     if (!deleted) {
       return NextResponse.json({ error: "Submission not found or already deleted." }, { status: 404 });
     }
@@ -304,11 +304,11 @@ export async function DELETE(request: Request) {
       category: "wallet",
       status: "warning",
       severity: "warning",
-      ipAddress: "127.0.0.1",
+      ipAddress: "Apex Production Gateway",
       location: "ApexVeltrix Admin Portal",
       browser: "Admin Action",
       details: { id },
-    });
+    }).catch(() => {});
 
     return NextResponse.json({ success: true, message: `Submission ${id} deleted successfully.` });
   } catch (error) {
@@ -316,5 +316,3 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: "Internal server error." }, { status: 500 });
   }
 }
-
-

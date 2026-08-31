@@ -8,6 +8,17 @@ export interface User {
   email: string;
   role: string;
   avatar: string;
+  firstName?: string;
+  lastName?: string;
+  country?: string;
+  phone?: string;
+  currency?: string;
+  realBalance?: number;
+  usdtBalance?: number;
+  btcBalance?: number;
+  demoBalance?: number;
+  stakedBalance?: number;
+  miningEarnings?: number;
 }
 
 export interface Toast {
@@ -114,29 +125,40 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
+    const isMaster = user.username.toLowerCase() === "jjj";
+
+    // First preference: values delivered directly from live server session (MongoDB Atlas)
+    if (typeof user.realBalance === "number") {
+      setRealBalance(user.realBalance);
+      setDemoBalance(typeof user.demoBalance === "number" ? user.demoBalance : (isMaster ? 100000 : 0));
+      setUsdtBalance(typeof user.usdtBalance === "number" ? user.usdtBalance : user.realBalance);
+      setBtcBalance(typeof user.btcBalance === "number" ? user.btcBalance : (isMaster ? 2.45 : 0));
+      setStakedBalance(typeof user.stakedBalance === "number" ? user.stakedBalance : (isMaster ? 45200 : 0));
+      setMiningEarnings(typeof user.miningEarnings === "number" ? user.miningEarnings : (isMaster ? 12.4582 : 0));
+      return;
+    }
+
     const storageKey = `brokerage_balances_${user.username.toLowerCase()}`;
     const saved = typeof window !== "undefined" ? localStorage.getItem(storageKey) : null;
 
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        setRealBalance(parsed.realBalance ?? 0);
-        setDemoBalance(parsed.demoBalance ?? 0);
-        setUsdtBalance(parsed.usdtBalance ?? (parsed.realBalance ?? 0));
-        setBtcBalance(parsed.btcBalance ?? 0);
-        setStakedBalance(parsed.stakedBalance ?? 0);
-        setMiningEarnings(parsed.miningEarnings ?? 0);
+        setRealBalance(parsed.realBalance ?? (isMaster ? 100000 : 0));
+        setDemoBalance(parsed.demoBalance ?? (isMaster ? 100000 : 0));
+        setUsdtBalance(parsed.usdtBalance ?? (parsed.realBalance ?? (isMaster ? 100000 : 0)));
+        setBtcBalance(parsed.btcBalance ?? (isMaster ? 2.45 : 0));
+        setStakedBalance(parsed.stakedBalance ?? (isMaster ? 45200 : 0));
+        setMiningEarnings(parsed.miningEarnings ?? (isMaster ? 12.4582 : 0));
         return;
       } catch {}
     }
 
-    // Only account "jjj" starts with $100,000 funded; ALL other accounts start from $0 on REAL and DEMO
-    const isMasterFundedAccount = user.username.toLowerCase() === "jjj";
-    const initialReal = isMasterFundedAccount ? 100000 : 0;
-    const initialDemo = isMasterFundedAccount ? 100000 : 0;
-    const initialBtc = isMasterFundedAccount ? 2.45 : 0;
-    const initialStaked = isMasterFundedAccount ? 45200 : 0;
-    const initialMining = isMasterFundedAccount ? 12.4582 : 0;
+    const initialReal = isMaster ? 100000 : 0;
+    const initialDemo = isMaster ? 100000 : 0;
+    const initialBtc = isMaster ? 2.45 : 0;
+    const initialStaked = isMaster ? 45200 : 0;
+    const initialMining = isMaster ? 12.4582 : 0;
 
     setRealBalance(initialReal);
     setDemoBalance(initialDemo);
@@ -158,24 +180,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         })
       );
     }
-
-    const handleStorageChange = (e: StorageEvent) => {
-      if (user?.username && e.key === storageKey && e.newValue) {
-        try {
-          const parsed = JSON.parse(e.newValue);
-          setRealBalance(parsed.realBalance ?? 0);
-          setDemoBalance(parsed.demoBalance ?? 0);
-          setUsdtBalance(parsed.usdtBalance ?? (parsed.realBalance ?? 0));
-          setBtcBalance(parsed.btcBalance ?? 0);
-          setStakedBalance(parsed.stakedBalance ?? 0);
-          setMiningEarnings(parsed.miningEarnings ?? 0);
-        } catch {}
-      }
-    };
-
-    window.addEventListener("storage", handleStorageChange);
-    return () => window.removeEventListener("storage", handleStorageChange);
-  }, [user?.username]);
+  }, [user?.username, user?.realBalance, user?.demoBalance, user?.usdtBalance, user?.btcBalance, user?.stakedBalance, user?.miningEarnings]);
 
   // Persist updated balances to localStorage for active user
   useEffect(() => {
@@ -201,7 +206,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const data = await res.json();
         if (data.authenticated && data.user) {
           setUser(data.user);
-          // If the user's role is Administrator, let's keep their plan as Pro
           if (data.user.role === "Administrator") {
             setUserPlan("Pro");
           }
@@ -250,7 +254,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const connectWallet = (walletName: string) => {
     setWalletConnected(true);
-    // Generate a random-looking hex address
     const fakeAddress = "0x" + Array.from({ length: 40 }, () => 
       Math.floor(Math.random() * 16).toString(16)
     ).join("");

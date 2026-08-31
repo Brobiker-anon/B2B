@@ -37,7 +37,7 @@ export default function NavigationLogger() {
           category,
           status,
           severity,
-          ipAddress: "127.0.0.1",
+          ipAddress: "Production Client",
           location: "ApexVeltrix Portal",
           browser: typeof navigator !== "undefined" ? navigator.userAgent : "Client Browser",
           details: details || {}

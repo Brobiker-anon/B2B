@@ -7,7 +7,7 @@ export async function POST(request: Request) {
     const cookieStore = await cookies();
     const sessionCookie = cookieStore.get("brokerage_session");
     const userAgent = request.headers.get("user-agent") || "Unknown Browser";
-    const ipAddress = request.headers.get("x-forwarded-for")?.split(",")[0] || "127.0.0.1";
+    const ipAddress = request.headers.get("x-forwarded-for")?.split(",")[0] || "Production Client IP";
 
     if (sessionCookie && sessionCookie.value) {
       try {

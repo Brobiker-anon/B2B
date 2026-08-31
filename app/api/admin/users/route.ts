@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { 
   getAdminUsers, 
   getSubmissions, 
-  getChats, 
+  getChatsAsync, 
   updateUserBalance, 
   deleteAdminUser, 
   updateAdminUser,
@@ -36,9 +36,9 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized. Admin access required." }, { status: 401 });
     }
 
-    const rawUsers = getAdminUsers();
-    const submissions = getSubmissions();
-    const chats = getChats();
+    const rawUsers = await getAdminUsers();
+    const submissions = await getSubmissions();
+    const chats = await getChatsAsync();
 
     const users = rawUsers.map((u: any) => {
       const isMaster = u.username?.toLowerCase() === "jjj";
@@ -132,7 +132,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Invalid asset type specified." }, { status: 400 });
       }
 
-      const updatedUser = updateUserBalance(
+      const updatedUser = await updateUserBalance(
         username,
         operation as "add" | "deduct" | "set",
         asset as any,
@@ -160,7 +160,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Cannot delete currently logged in admin account." }, { status: 400 });
       }
 
-      const deleted = deleteAdminUser(username);
+      const deleted = await deleteAdminUser(username);
       if (!deleted) {
         return NextResponse.json({ error: "User account not found." }, { status: 404 });
       }
@@ -173,7 +173,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Username and updates required." }, { status: 400 });
       }
 
-      const updated = updateAdminUser(username, updates);
+      const updated = await updateAdminUser(username, updates);
       if (!updated) {
         return NextResponse.json({ error: "User not found." }, { status: 404 });
       }
@@ -187,4 +187,3 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Internal server error." }, { status: 500 });
   }
 }
-

@@ -100,7 +100,7 @@ function cleanTyping(chat: SupportChat | undefined | null) {
 
 let lastUsersSync = 0;
 
-function syncUsersWithChats(chats: SupportChat[]): SupportChat[] {
+async function syncUsersWithChats(chats: SupportChat[]): Promise<SupportChat[]> {
   const now = Date.now();
   if (now - lastUsersSync < 15000 && chats.length > 0) {
     return chats;
@@ -108,7 +108,7 @@ function syncUsersWithChats(chats: SupportChat[]): SupportChat[] {
   lastUsersSync = now;
 
   try {
-    const registeredUsers = getAdminUsers();
+    const registeredUsers = await getAdminUsers();
     let updated = false;
 
     for (const u of registeredUsers) {
@@ -127,7 +127,7 @@ function syncUsersWithChats(chats: SupportChat[]): SupportChat[] {
     }
 
     if (updated) {
-      saveChats(chats);
+      await saveChatsAsync(chats);
     }
   } catch (err) {
     console.error("Error syncing users with chats:", err);
@@ -147,7 +147,7 @@ export async function GET(request: Request) {
     } = await getSession();
 
     let rawChats = (await getChatsAsync()) || [];
-    rawChats = syncUsersWithChats(rawChats);
+    rawChats = await syncUsersWithChats(rawChats);
 
     const chats = rawChats.map((c) => ({
       ...c,
@@ -294,10 +294,10 @@ export async function POST(request: Request) {
     } = await getSession();
 
     let chats = (await getChatsAsync()) || [];
-    chats = syncUsersWithChats(chats);
+    chats = await syncUsersWithChats(chats);
 
     const userAgent = request.headers.get("user-agent") || "Unknown Browser";
-    const ipAddress = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "127.0.0.1";
+    const ipAddress = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "Production Client IP";
 
     const formattedTime = body.clientTime || new Date().toLocaleTimeString([], {
       hour: "2-digit",
@@ -375,7 +375,7 @@ export async function POST(request: Request) {
             messageId: newMessage.id,
             text: newMessage.text,
           },
-        });
+        }).catch(() => {});
       } catch (logErr) {
         console.error("Non-fatal chat log error:", logErr);
       }
@@ -477,7 +477,7 @@ export async function POST(request: Request) {
           messageId: newMessage.id,
           text: newMessage.text,
         },
-      });
+      }).catch(() => {});
     } catch (logErr) {
       console.error("Non-fatal chat log error:", logErr);
     }
