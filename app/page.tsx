@@ -120,24 +120,27 @@ export default function Dashboard() {
   // Accordion state
   const [openTradesExpanded, setOpenTradesExpanded] = useState(true);
   const [closedTradesExpanded, setClosedTradesExpanded] = useState(false);
-  const [tradesList, setTradesList] = useState<CustomTrade[]>(() => {
-    if (typeof window !== "undefined") {
-      try {
-        const saved = localStorage.getItem("brokerage_active_trades");
-        if (saved) return JSON.parse(saved);
-      } catch {}
-    }
-    return [];
-  });
+  const [tradesList, setTradesList] = useState<CustomTrade[]>([]);
   const [tradesTab, setTradesTab] = useState<"All" | "Swaps" | "Auto">("All");
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    const userKey = user?.username ? user.username.toLowerCase() : "guest";
+    try {
+      const saved = localStorage.getItem(`brokerage_active_trades_${userKey}`);
+      if (saved) setTradesList(JSON.parse(saved));
+      else setTradesList([]);
+    } catch {}
+  }, [user?.username]);
+
+  useEffect(() => {
     if (typeof window !== "undefined") {
+      const userKey = user?.username ? user.username.toLowerCase() : "guest";
       try {
-        localStorage.setItem("brokerage_active_trades", JSON.stringify(tradesList));
+        localStorage.setItem(`brokerage_active_trades_${userKey}`, JSON.stringify(tradesList));
       } catch {}
     }
-  }, [tradesList]);
+  }, [tradesList, user?.username]);
 
   useEffect(() => {
     setMounted(true);

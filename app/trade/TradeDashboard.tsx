@@ -88,42 +88,41 @@ export default function Trade({ initialAsset = "BTC" }: { initialAsset?: string 
   const balance = accountType === "REAL" ? realBalance : demoBalance;
   const setBalance = accountType === "REAL" ? setRealBalance : setDemoBalance;
   
-  // Persist trades in localStorage
-  const [activeTrades, setActiveTrades] = useState<CustomTrade[]>(() => {
-    if (typeof window !== "undefined") {
-      try {
-        const saved = localStorage.getItem("brokerage_active_trades");
-        if (saved) return JSON.parse(saved);
-      } catch {}
-    }
-    return [];
-  });
+  // Persist trades scoped to the active account
+  const [activeTrades, setActiveTrades] = useState<CustomTrade[]>([]);
+  const [closedTrades, setClosedTrades] = useState<CustomTrade[]>([]);
 
-  const [closedTrades, setClosedTrades] = useState<CustomTrade[]>(() => {
-    if (typeof window !== "undefined") {
-      try {
-        const saved = localStorage.getItem("brokerage_closed_trades");
-        if (saved) return JSON.parse(saved);
-      } catch {}
-    }
-    return [];
-  });
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const userKey = user?.username ? user.username.toLowerCase() : "guest";
+    try {
+      const savedActive = localStorage.getItem(`brokerage_active_trades_${userKey}`);
+      if (savedActive) setActiveTrades(JSON.parse(savedActive));
+      else setActiveTrades([]);
+
+      const savedClosed = localStorage.getItem(`brokerage_closed_trades_${userKey}`);
+      if (savedClosed) setClosedTrades(JSON.parse(savedClosed));
+      else setClosedTrades([]);
+    } catch {}
+  }, [user?.username]);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
+      const userKey = user?.username ? user.username.toLowerCase() : "guest";
       try {
-        localStorage.setItem("brokerage_active_trades", JSON.stringify(activeTrades));
+        localStorage.setItem(`brokerage_active_trades_${userKey}`, JSON.stringify(activeTrades));
       } catch {}
     }
-  }, [activeTrades]);
+  }, [activeTrades, user?.username]);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
+      const userKey = user?.username ? user.username.toLowerCase() : "guest";
       try {
-        localStorage.setItem("brokerage_closed_trades", JSON.stringify(closedTrades));
+        localStorage.setItem(`brokerage_closed_trades_${userKey}`, JSON.stringify(closedTrades));
       } catch {}
     }
-  }, [closedTrades]);
+  }, [closedTrades, user?.username]);
 
   const wsRef = useRef<WebSocket | null>(null);
   const fallbackIntervalRef = useRef<NodeJS.Timeout | null>(null);

@@ -66,21 +66,21 @@ export default function Withdraw() {
   useEffect(() => {
     async function fetchSubmissions() {
       try {
-        const res = await fetch("/api/submissions");
+        const res = await fetch("/api/submissions", { cache: "no-store" });
         if (res.ok) {
           const data = await res.json();
           if (data.success && Array.isArray(data.submissions)) {
             const withdraws = data.submissions
-              .filter((s: any) => s.type === "withdrawal")
+              .filter((s: any) => s.type === "withdrawal" || s.type === "withdraw")
               .map((s: any) => ({
                 id: s.id,
-                date: new Date(s.timestamp || Date.now()).toLocaleDateString(),
+                date: new Date(s.createdAt || s.timestamp || Date.now()).toLocaleDateString(),
                 reference: s.reference,
                 method: s.method,
                 type: "withdrawal",
                 amountVal: s.amountVal,
                 amountAsset: s.amountAsset,
-                totalAud: s.details?.totalAud || `$${parseFloat(s.amountVal || "0").toFixed(2)}`,
+                totalAud: s.totalUsd || s.details?.totalAud || `$${parseFloat(s.amountVal || "0").toFixed(2)}`,
                 status: s.status || "Pending",
               }));
             setWithdrawalRecords(withdraws);
@@ -102,7 +102,7 @@ export default function Withdraw() {
     }
 
     fetchSubmissions();
-  }, []);
+  }, [user?.username]);
 
   // Get available balance depending on asset
   const getAvailableBalance = (asset: string) => {
