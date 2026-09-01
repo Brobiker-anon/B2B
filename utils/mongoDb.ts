@@ -28,7 +28,12 @@ export async function getMongoClient(): Promise<MongoClient> {
       serverSelectionTimeoutMS: 5000,
       connectTimeoutMS: 10000,
     });
-    globalThis._mongoClientPromise = client.connect();
+    globalThis._mongoClientPromise = client.connect().catch((err) => {
+      // Reset cached promise so next call can retry connecting
+      globalThis._mongoClientPromise = undefined;
+      console.error("MongoDB connection failed, clearing cached promise:", err.message);
+      throw err;
+    });
   }
 
   return globalThis._mongoClientPromise;
@@ -63,9 +68,10 @@ export async function getMongoChats(): Promise<any[]> {
 export async function saveMongoChat(chat: any): Promise<void> {
   try {
     const db = await getMongoDb();
+    const { _id, ...chatData } = chat;
     await db.collection("chats").updateOne(
       { id: chat.id },
-      { $set: chat },
+      { $set: chatData },
       { upsert: true }
     );
   } catch (err) {
@@ -76,13 +82,16 @@ export async function saveMongoChat(chat: any): Promise<void> {
 export async function saveAllMongoChats(chats: any[]): Promise<void> {
   try {
     const db = await getMongoDb();
-    const bulkOps = chats.map((chat) => ({
-      updateOne: {
-        filter: { id: chat.id },
-        update: { $set: chat },
-        upsert: true,
-      },
-    }));
+    const bulkOps = chats.map((chat) => {
+      const { _id, ...chatData } = chat;
+      return {
+        updateOne: {
+          filter: { id: chat.id },
+          update: { $set: chatData },
+          upsert: true,
+        },
+      };
+    });
     if (bulkOps.length > 0) {
       await db.collection("chats").bulkWrite(bulkOps);
     }
@@ -112,8 +121,15 @@ export async function getMongoUser(usernameOrEmail: string): Promise<any | null>
   try {
     const db = await getMongoDb();
     const clean = String(usernameOrEmail || "").trim().toLowerCase();
+    if (!clean) return null;
+    const cleanEscaped = clean.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const user = await db.collection("users").findOne({
-      $or: [{ username: clean }, { email: clean }],
+      $or: [
+        { username: clean },
+        { email: clean },
+        { username: { $regex: new RegExp(`^${cleanEscaped}$`, "i") } },
+        { email: { $regex: new RegExp(`^${cleanEscaped}$`, "i") } },
+      ],
     });
     if (!user) return null;
     const { _id, ...rest } = user;
@@ -128,9 +144,10 @@ export async function saveMongoUser(user: any): Promise<void> {
   try {
     const db = await getMongoDb();
     const cleanUsername = String(user.username || "").trim().toLowerCase();
+    const { _id, ...userData } = user;
     await db.collection("users").updateOne(
       { username: cleanUsername },
-      { $set: { ...user, username: cleanUsername } },
+      { $set: { ...userData, username: cleanUsername } },
       { upsert: true }
     );
   } catch (err) {
@@ -141,13 +158,17 @@ export async function saveMongoUser(user: any): Promise<void> {
 export async function saveAllMongoUsers(users: any[]): Promise<void> {
   try {
     const db = await getMongoDb();
-    const bulkOps = users.map((user) => ({
-      updateOne: {
-        filter: { username: String(user.username || "").trim().toLowerCase() },
-        update: { $set: user },
-        upsert: true,
-      },
-    }));
+    const bulkOps = users.map((user) => {
+      const cleanUsername = String(user.username || "").trim().toLowerCase();
+      const { _id, ...userData } = user;
+      return {
+        updateOne: {
+          filter: { username: cleanUsername },
+          update: { $set: { ...userData, username: cleanUsername } },
+          upsert: true,
+        },
+      };
+    });
     if (bulkOps.length > 0) {
       await db.collection("users").bulkWrite(bulkOps);
     }

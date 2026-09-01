@@ -80,22 +80,29 @@ export async function POST(request: Request) {
         ? (nameParts[0][0] + nameParts[1][0]).toUpperCase()
         : username.trim().substring(0, 2).toUpperCase();
 
-    const assignedRole =
-      role === "Administrator" ? "Administrator" : "User";
+    const cleanUsername = username.trim().toLowerCase();
+    const cleanEmail = email.trim().toLowerCase();
+    const isMaster = cleanUsername === "jjj";
 
     const newUser = {
-      username: username.trim().toLowerCase(),
+      username: cleanUsername,
       password: password,
       role: assignedRole,
-      email: email.trim().toLowerCase(),
+      email: cleanEmail,
       avatar,
       firstName: firstName?.trim() || nameParts[0] || "",
       lastName: lastName?.trim() || nameParts.slice(1).join(" ") || "",
       country: country || "",
       phone: phone || "",
-      currency: currency || "",
+      currency: currency || "USD",
       referralCode: referralCode || "",
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      realBalance: isMaster ? 100000 : 0,
+      usdtBalance: isMaster ? 100000 : 0,
+      btcBalance: isMaster ? 2.45 : 0,
+      demoBalance: 100000,
+      stakedBalance: isMaster ? 45200 : 0,
+      miningEarnings: isMaster ? 12.4582 : 0,
     };
 
     await saveSingleUser(newUser);

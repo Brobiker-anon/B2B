@@ -145,38 +145,123 @@ export async function parseJsonBody(request: Request) {
   }
 }
 
+import fs from "fs";
+import path from "path";
+
+// Helper to safely read users from data/users.json
+function readDiskUsers(): any[] {
+  try {
+    const filePath = path.join(process.cwd(), "data", "users.json");
+    if (fs.existsSync(filePath)) {
+      const content = fs.readFileSync(filePath, "utf-8");
+      const parsed = JSON.parse(content);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (err) {
+    console.error("Error reading data/users.json:", err);
+  }
+  return [];
+}
+
+// Helper to safely write users to data/users.json
+function writeDiskUsers(users: any[]) {
+  try {
+    const dataDir = path.join(process.cwd(), "data");
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+    }
+    const filePath = path.join(dataDir, "users.json");
+    const cleanUsers = users.map((u) => {
+      const { _id, ...rest } = u;
+      return rest;
+    });
+    fs.writeFileSync(filePath, JSON.stringify(cleanUsers, null, 2), "utf-8");
+  } catch (err) {
+    console.error("Error writing data/users.json:", err);
+  }
+}
+
 // -------------------------------------------------------------
-// ADMIN / USER REPOSITORY (MongoDB Atlas)
+// ADMIN / USER REPOSITORY (MongoDB Atlas + Local Resilient Store)
 // -------------------------------------------------------------
 export const getAdminUsers = async (): Promise<any[]> => {
+  const diskUsers = readDiskUsers();
+  let mongoUsers: any[] = [];
+
   try {
-    const mongoUsers = await getMongoUsers();
-    if (mongoUsers && mongoUsers.length > 0) {
-      globalThis.__users_cache__ = mongoUsers;
-      return mongoUsers;
-    }
+    mongoUsers = await getMongoUsers();
   } catch (err) {
     console.error("Error fetching users from MongoDB:", err);
   }
-  return globalThis.__users_cache__ || [];
+
+  // Merge MongoDB users, disk users, and in-memory cache users
+  const userMap = new Map<string, any>();
+
+  // 1. Add disk users
+  for (const u of diskUsers) {
+    if (u?.username) {
+      userMap.set(u.username.toLowerCase(), u);
+    }
+  }
+
+  // 2. Add in-memory cache users
+  if (globalThis.__users_cache__ && Array.isArray(globalThis.__users_cache__)) {
+    for (const u of globalThis.__users_cache__) {
+      if (u?.username) {
+        userMap.set(u.username.toLowerCase(), {
+          ...(userMap.get(u.username.toLowerCase()) || {}),
+          ...u,
+        });
+      }
+    }
+  }
+
+  // 3. Add / overwrite with live MongoDB users (authoritative)
+  for (const u of mongoUsers) {
+    if (u?.username) {
+      userMap.set(u.username.toLowerCase(), {
+        ...(userMap.get(u.username.toLowerCase()) || {}),
+        ...u,
+      });
+    }
+  }
+
+  const mergedUsers = Array.from(userMap.values());
+  globalThis.__users_cache__ = mergedUsers;
+
+  // Persist combined users to disk for guaranteed recovery
+  if (mergedUsers.length > 0) {
+    writeDiskUsers(mergedUsers);
+  }
+
+  return mergedUsers;
 };
 
 export const saveAdminUsers = async (users: any[]) => {
   globalThis.__users_cache__ = users;
+  writeDiskUsers(users);
   saveAllMongoUsers(users).catch((err) => console.error("Error batch saving users to MongoDB:", err));
 };
 
 export const saveSingleUser = async (user: any) => {
+  const { _id, ...cleanUserData } = user;
+  const usernameKey = String(cleanUserData.username || "").toLowerCase();
+
   if (!globalThis.__users_cache__) globalThis.__users_cache__ = [];
   const idx = globalThis.__users_cache__.findIndex(
-    (u) => u.username?.toLowerCase() === user.username?.toLowerCase()
+    (u) => u.username?.toLowerCase() === usernameKey
   );
   if (idx > -1) {
-    globalThis.__users_cache__[idx] = user;
+    globalThis.__users_cache__[idx] = { ...globalThis.__users_cache__[idx], ...cleanUserData };
   } else {
-    globalThis.__users_cache__.push(user);
+    globalThis.__users_cache__.push(cleanUserData);
   }
-  await saveMongoUser(user);
+
+  // Immediate disk persistence
+  writeDiskUsers(globalThis.__users_cache__);
+
+  // Await MongoDB persistence
+  await saveMongoUser(cleanUserData);
 };
 
 export const updateUserBalance = async (
@@ -275,9 +360,11 @@ export const updateUserBalance = async (
 };
 
 export const deleteAdminUser = async (username: string): Promise<boolean> => {
+  const cleanUsername = String(username || "").toLowerCase();
   const users = await getAdminUsers();
-  const filtered = users.filter((u: any) => u.username?.toLowerCase() !== username.toLowerCase());
+  const filtered = users.filter((u: any) => u.username?.toLowerCase() !== cleanUsername);
   globalThis.__users_cache__ = filtered;
+  writeDiskUsers(filtered);
   return await deleteMongoUser(username);
 };
 

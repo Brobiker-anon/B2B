@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getMongoUser } from "@/utils/mongoDb";
+import { getAdminUsers } from "@/utils/serverDb";
 
 export const dynamic = "force-dynamic";
 
@@ -33,8 +34,17 @@ export async function GET() {
       );
     }
 
-    // Always fetch live user state and balances from persistent MongoDB Atlas
-    const liveUser = await getMongoUser(rawSession.username);
+    // Always fetch live user state and balances from persistent MongoDB Atlas with local fallback
+    let liveUser = await getMongoUser(rawSession.username);
+    if (!liveUser) {
+      const allUsers = await getAdminUsers();
+      const cleanSessionName = String(rawSession.username || "").toLowerCase();
+      liveUser = allUsers.find(
+        (u) =>
+          u.username?.toLowerCase() === cleanSessionName ||
+          u.email?.toLowerCase() === cleanSessionName
+      ) || null;
+    }
 
     const isMaster = rawSession.username.toLowerCase() === "jjj";
     const realBal = typeof liveUser?.realBalance === "number" ? liveUser.realBalance : (isMaster ? 100000 : 0);

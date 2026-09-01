@@ -7,6 +7,8 @@ import {
   updateUserBalance, 
   deleteAdminUser, 
   updateAdminUser,
+  saveSingleUser,
+  addServerLog,
   parseJsonBody 
 } from "@/utils/serverDb";
 
@@ -168,17 +170,99 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true, message: `Account ${username} removed successfully.` });
     }
 
-    if (action === "update_user") {
-      if (!username || !updates) {
-        return NextResponse.json({ error: "Username and updates required." }, { status: 400 });
+    if (action === "create_user") {
+      const { 
+        newUsername, 
+        newPassword, 
+        newEmail, 
+        newRole, 
+        newCountry, 
+        newPhone, 
+        newCurrency, 
+        newRealBalance,
+        newBtcBalance,
+        newDemoBalance,
+        newStakedBalance 
+      } = body;
+
+      if (!newUsername || !newPassword || !newEmail) {
+        return NextResponse.json(
+          { error: "Username, password, and email are required to create an account." },
+          { status: 400 }
+        );
       }
 
-      const updated = await updateAdminUser(username, updates);
-      if (!updated) {
-        return NextResponse.json({ error: "User not found." }, { status: 404 });
+      const cleanUname = String(newUsername).trim().toLowerCase();
+      const cleanMail = String(newEmail).trim().toLowerCase();
+
+      const existingUsers = await getAdminUsers();
+      if (existingUsers.some((u: any) => u.username?.toLowerCase() === cleanUname)) {
+        return NextResponse.json({ error: "That username is already in use." }, { status: 409 });
       }
 
-      return NextResponse.json({ success: true, user: updated });
+      if (existingUsers.some((u: any) => u.email?.toLowerCase() === cleanMail)) {
+        return NextResponse.json({ error: "An account with that email already exists." }, { status: 409 });
+      }
+
+      const nameParts = newUsername.trim().split(/\s+/);
+      const avatar =
+        nameParts.length >= 2
+          ? (nameParts[0][0] + nameParts[1][0]).toUpperCase()
+          : newUsername.trim().substring(0, 2).toUpperCase();
+
+      const realBal = typeof newRealBalance === "number" ? Math.max(0, newRealBalance) : 0;
+      const btcBal = typeof newBtcBalance === "number" ? Math.max(0, newBtcBalance) : 0;
+      const demoBal = typeof newDemoBalance === "number" ? Math.max(0, newDemoBalance) : 100000;
+      const stakedBal = typeof newStakedBalance === "number" ? Math.max(0, newStakedBalance) : 0;
+
+      const newUserObj = {
+        username: cleanUname,
+        password: String(newPassword),
+        email: cleanMail,
+        role: newRole === "Administrator" ? "Administrator" : "User",
+        avatar,
+        firstName: nameParts[0] || "",
+        lastName: nameParts.slice(1).join(" ") || "",
+        country: newCountry || "",
+        phone: newPhone || "",
+        currency: newCurrency || "USD",
+        referralCode: "",
+        createdAt: new Date().toISOString(),
+        realBalance: realBal,
+        usdtBalance: realBal,
+        btcBalance: btcBal,
+        demoBalance: demoBal,
+        stakedBalance: stakedBal,
+        miningEarnings: 0,
+      };
+
+      await saveSingleUser(newUserObj);
+
+      addServerLog({
+        userId: `usr-${cleanUname}`,
+        userName: cleanUname,
+        userEmail: cleanMail,
+        userRole: newUserObj.role,
+        avatar,
+        action: `Account created directly by Admin (${session.username}): ${cleanUname}`,
+        category: "security",
+        status: "success",
+        severity: "info",
+        ipAddress: "Apex Admin Gateway",
+        location: "Admin Control",
+        browser: "Admin Dashboard",
+        details: {
+          createdByAdmin: session.username,
+          role: newUserObj.role,
+          initialRealBalance: realBal,
+        },
+      }).catch(() => {});
+
+      return NextResponse.json({
+        success: true,
+        message: `Account ${cleanUname} created successfully!`,
+        user: newUserObj,
+      });
     }
 
     return NextResponse.json({ error: "Unknown action specified." }, { status: 400 });
