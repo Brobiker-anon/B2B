@@ -12,8 +12,8 @@ export async function GET() {
 
     if (!sessionCookie || !sessionCookie.value) {
       return NextResponse.json(
-        { authenticated: false, error: "Unauthenticated session" },
-        { status: 401 }
+        { authenticated: false, message: "No active session" },
+        { status: 200 }
       );
     }
 
@@ -22,15 +22,15 @@ export async function GET() {
       rawSession = JSON.parse(sessionCookie.value);
     } catch {
       return NextResponse.json(
-        { authenticated: false, error: "Session parsing error" },
-        { status: 401 }
+        { authenticated: false, message: "Session parsing error" },
+        { status: 200 }
       );
     }
 
     if (!rawSession?.username) {
       return NextResponse.json(
-        { authenticated: false, error: "Invalid session structure" },
-        { status: 401 }
+        { authenticated: false, message: "Invalid session structure" },
+        { status: 200 }
       );
     }
 

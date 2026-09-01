@@ -83,6 +83,7 @@ export async function POST(request: Request) {
     const cleanUsername = username.trim().toLowerCase();
     const cleanEmail = email.trim().toLowerCase();
     const isMaster = cleanUsername === "jjj";
+    const assignedRole = role === "Administrator" ? "Administrator" : "User";
 
     const newUser = {
       username: cleanUsername,
